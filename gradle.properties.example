@@ -1,0 +1,182 @@
+# Paste this whole file to your gradle.properties file. The filled in example values
+# work with the example branch csv files in the assets folder. Please change all
+# values based on your csv files and their formatting and delete this example file as
+# well as all provided example csv assets. Note that single space values, like for
+# DELIM, must be escaped with a \  (backslash) or enclosed in " " (double quotes) to be
+# preserved.
+
+# ANDROID PROJECT SETTINGS
+
+# Project-wide Gradle settings.
+# IDE (e.g. Android Studio) users:
+# Gradle settings configured through the IDE *will override*
+# any settings specified in this file.
+# For more details on how to configure your build environment visit
+# http://www.gradle.org/docs/current/userguide/build_environment.html
+# Specifies the JVM arguments used for the daemon process.
+# The setting is particularly useful for tweaking memory settings.
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+
+# When configured, Gradle will run in incubating parallel mode.
+# This option should only be used with decoupled projects. For more details, visit
+# https://developer.android.com/r/tools/gradle-multi-project-decoupled-projects
+# org.gradle.parallel=true
+
+# AndroidX package structure to make it clearer which packages are bundled with the
+# Android operating system, and which are packaged with your app's APK
+# https://developer.android.com/topic/libraries/support-library/androidx-rn
+android.useAndroidX=true
+
+# Enables namespacing of each library's R class so that its R class includes only the
+# resources declared in the library itself and none from the library's dependencies,
+# thereby reducing the size of the R class for that library
+android.nonTransitiveRClass=true
+
+# USER BUILD SETTINGS
+
+# (int)[] x-index(es) of address column
+ADDRESSINDEX=1,1
+
+# (int)[] y-index(es) of address column
+ADDRESSOFFSET=0,0
+
+# (bool) use double query for traffic metrics
+ADVANCEDROUTES=true
+
+# (bool) allow duplicate markers
+ALLOWDUPLICATES=false
+
+# (int) minimum delay between queries, do not exceed 50 requests / second for free tier
+BASEDELAY=10
+
+# (str)[] delimiter(s) for multiple codes, use " " for a single space
+CODEDELIM=,/
+
+# (str)[] prefix(es) for codes
+CODEPREFIX=RAN,RBN
+
+# (str)[] colour(s) for markers
+COLOURS=red,green
+
+# (int)[] number of columns per row
+COLUMNSPERROW=4,4
+
+# (str) internal db file name
+DBFILE=markers.db
+
+# (str) auto-select file from FILENAMES
+DEFAULTFILE=LA_branches.csv
+
+# (str)[] delimiter(s) between code and name, use " " for a single space
+DELIM=" "," "
+
+# (bool) use embedded db or csv file(s)
+EMBEDDED=true
+
+# (str) embedded db file name
+EMBEDDEDDB=
+
+# (bool) export db file to download folder
+EXPORT=true
+
+# (str)[] embedded csv file name(s)
+FILENAMES=LA_branches.csv,CA_branches.csv
+
+# (bool) use firebase remote config to get api key, otherwise use api.dat and store in ndk
+FIREBASE=true
+
+# (int)[] ignore first x row(s)
+IGNOREROWSBEGIN=1,1
+
+# (int)[] ignore last x non-empty row(s)
+IGNOREROWSEND=0,0
+
+# (int) max number of intermediate markers, current api limit of 25
+INTERMEDIATES=25
+
+# (int) max number of threads to use, do not overload with requests
+MAXTHREADS=2
+
+# (int) min number of markers in a cluster
+MINCLUSTERSIZE=5
+
+# (bool)[] use multiple rows per entry
+MULTIROWSETS=false,false
+
+# (bool)[] use phone numbers
+PHONE=true,true
+
+# (int)[] x-index(es) of phone number column
+PHONEINDEX=3,3
+
+# (int)[] y-index(es) of phone number column
+PHONEOFFSET=0,0
+
+# (int) max random delay between queries, prevents request collisions, do not exceed
+# 50 requests / second for free tier
+RANDOMDELAY=50
+
+# (bool)[] use refined address column, such as postal code or google plus code
+REFINED=true,true
+
+# (int)[] x-index(es) of refined address column
+REFINEDADDRESSINDEX=2,2
+
+# (int)[] y-index(es) of refined address column
+REFINEDADDRESSOFFSET=0,0
+
+# (int)[] number of rows per set
+ROWSPERSET=1,1
+
+# (bool) read comma separated values, one set per file name expected, otherwise first
+# value used, settings that can have multiple values are denoted by [] after (type)
+SETTINGSPERFILE=true
+
+# (int) timeout in seconds for firebase api key remote config
+TIMEOUT=10
+
+# (int)[] x-index(es) of title column
+TITLEINDEX=0,0
+
+# (int)[] y-index(es) of title column
+TITLEOFFSET=0,0
+
+# (float)[] ratio for light, moderate, heavy, and severe traffic
+TRAFFICMETRICS=1.05,1.15,1.25,1.45
+
+# my settings
+ADDRESSINDEX=0,5
+ADDRESSOFFSET=1,0
+ADVANCEDROUTES=true
+BASEDELAY=10
+CODEDELIM=/,
+CODEPREFIX=C2,
+COLOURS=red,green
+COLUMNSPERROW=9,6
+DBFILE=markers.db
+DEFAULTFILE=
+DELIM=" ",
+EMBEDDED=true
+EMBEDDEDDB=markers.db
+EXPORT=false
+FILENAMES=
+FIREBASE=true
+IGNOREROWSBEGIN=1,1
+IGNOREROWSEND=10,0
+INTERMEDIATES=25
+MAXTHREADS=2
+MINCLUSTERSIZE=5
+MULTIROWSETS=true,false
+PHONE=true,false
+PHONEINDEX=2,0
+PHONEOFFSET=0,0
+RANDOMDELAY=50
+REFINED=true,false
+REFINEDADDRESSINDEX=1,0
+REFINEDADDRESSOFFSET=1,0
+ROWSPERSET=2,1
+SETTINGSPERFILE=true
+TIMEOUT=10
+TITLEINDEX=0,0
+TITLEOFFSET=0,0
+TRAFFICMETRICS=1.05,1.15,1.25,1.45

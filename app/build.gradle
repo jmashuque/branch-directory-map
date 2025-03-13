@@ -1,0 +1,195 @@
+plugins {
+    alias(libs.plugins.android.application)
+    id 'com.google.gms.google-services'
+}
+
+android {
+    namespace 'com.example.branchdirectorymap'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.example.branchdirectorymap"
+        minSdk 23
+        targetSdk 35
+        versionCode 1
+        versionName "0.1-alpha1"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        def apiFile = rootProject.file("api.dat")
+        def mapsApiKey = "DEFAULT_MAPS_KEY"
+        def linkApiKey = "DEFAULT_LINK_KEY"
+
+        if(apiFile.exists()){
+            def lines = apiFile.readLines()
+            if(lines.size() >= 1){
+                mapsApiKey = lines[0].trim()
+            }
+
+            if("${FIREBASE}" == "false" && lines.size() >= 2){
+                linkApiKey = lines[1].trim()
+                def hexEncodedApiKey = linkApiKey.bytes.encodeHex().toString()
+                buildConfigField "boolean", "USE_FIREBASE", "false"
+                externalNativeBuild {
+                    cmake {
+                        arguments "-DGOOGLE_API_KEY_HEX=${hexEncodedApiKey}"
+                    }
+                }
+            } else {
+                buildConfigField "boolean", "USE_FIREBASE", "true"
+            }
+        }
+
+        manifestPlaceholders = [MAPS_API_KEY: mapsApiKey]
+
+        buildConfigField "String", "EMBEDDED_DB", "\"" + "${EMBEDDEDDB}" + "\""
+        if ("${EMBEDDED}" == "true") {
+            buildConfigField "boolean", "EMBEDDED_FILE", "true"
+            def FILE_NAMES = (project.hasProperty("FILENAMES") ? "${FILENAMES}" : "").trim()
+            if (FILE_NAMES.isEmpty()) {
+                buildConfigField "String", "FILE_NAMES", "\"\""
+            } else {
+                buildConfigField "String", "FILE_NAMES", "\"" + "${FILENAMES}" + "\""
+            }
+            def DEFAULT_FILE = (project.hasProperty("DEFAULTFILE") ? "${DEFAULTFILE}" : "").trim()
+            if (DEFAULT_FILE.isEmpty()) {
+                buildConfigField "String", "DEFAULT_FILE", "\"\""
+            } else {
+                buildConfigField "String", "DEFAULT_FILE", "\"" + "${DEFAULTFILE}" + "\""
+            }
+        } else {
+            buildConfigField "boolean", "EMBEDDED_FILE", "false"
+            buildConfigField "String", "FILE_NAMES", '""'
+            buildConfigField "String", "DEFAULT_FILE", '""'
+        }
+        buildConfigField "int", "MIN_CLUSTER_SIZE", ("${MINCLUSTERSIZE}" ?: "5")
+        buildConfigField "int", "MAX_THREADS", "${MAXTHREADS}"
+        buildConfigField "int", "BASE_DELAY_MS", "${BASEDELAY}"
+        buildConfigField "int", "RANDOM_DELAY_MS", "${RANDOMDELAY}"
+        buildConfigField "int", "INTERMEDIATE_STEPS", "${INTERMEDIATES}"
+        buildConfigField "String", "TRAFFIC_METRICS", "\"" + "${TRAFFICMETRICS}" + "\""
+        if ("${ADVANCEDROUTES}" == "true") {
+            buildConfigField "boolean", "USE_ADVANCED_ROUTING", "true"
+        } else {
+            buildConfigField "boolean", "USE_ADVANCED_ROUTING", "false"
+        }
+        buildConfigField "int", "TIMEOUT_S", "${TIMEOUT}"
+        buildConfigField "String", "DATABASE_NAME", "\"" + "${DBFILE}" + "\""
+        if ("${EXPORT}" == "true") {
+            buildConfigField "boolean", "EXPORT_DB", "true"
+        } else {
+            buildConfigField "boolean", "EXPORT_DB", "false"
+        }
+        if ("${ALLOWDUPLICATES}" == "true") {
+            buildConfigField "boolean", "ALLOW_DUPLICATES", "true"
+        } else {
+            buildConfigField "boolean", "ALLOW_DUPLICATES", "false"
+        }
+        if ("${SETTINGSPERFILE}" == "true") {
+            buildConfigField "boolean", "SETTINGS_PER_FILE", "true"
+        } else {
+            buildConfigField "boolean", "SETTINGS_PER_FILE", "false"
+        }
+        buildConfigField "String", "MARKER_COLOURS", "\"" + "${COLOURS}" + "\""
+        buildConfigField "String", "MULTI_ROW_SETS", "\"" + "${MULTIROWSETS}" + "\""
+        buildConfigField "String", "USE_PHONE", "\"" + "${PHONE}" + "\""
+        buildConfigField "String", "USE_REFINED", "\"" + "${REFINED}" + "\""
+        def DELIMVAL = (project.hasProperty("DELIM") ? "${DELIM}" : "")
+        DELIMVAL = DELIMVAL.replaceAll(/\\ /, " ").replaceAll(/"([^"]*)"/, '$1')
+        buildConfigField "String", "DELIMITER", "\"${DELIMVAL}\""
+        def CODEDELIMVAL = (project.hasProperty("CODEDELIM") ? "${CODEDELIM}" : "")
+        CODEDELIMVAL = CODEDELIMVAL.replaceAll(/\\ /, " ").replaceAll(/"([^"]*)"/, '$1')
+        buildConfigField "String", "CODE_DELIMITER", "\"${CODEDELIMVAL}\""
+        buildConfigField "String", "CODE_PREFIX", "\"" + "${CODEPREFIX}" + "\""
+        buildConfigField "String", "COLUMNS_PER_ROW", "\"" + "${COLUMNSPERROW}" + "\""
+        buildConfigField "String", "IGNORE_ROWS_BEGIN", "\"" + "${IGNOREROWSBEGIN}" + "\""
+        buildConfigField "String", "IGNORE_ROWS_END", "\"" + "${IGNOREROWSEND}" + "\""
+        buildConfigField "String", "TITLE_INDEX", "\"" + "${TITLEINDEX}" + "\""
+        buildConfigField "String", "ADDRESS_INDEX", "\"" + "${ADDRESSINDEX}" + "\""
+        buildConfigField "String", "REFINED_ADDRESS_INDEX", "\"" + "${REFINEDADDRESSINDEX}" + "\""
+        buildConfigField "String", "PHONE_INDEX", "\"" + "${PHONEINDEX}" + "\""
+        buildConfigField "String", "ROWS_PER_SET", "\"" + "${ROWSPERSET}" + "\""
+        buildConfigField "String", "TITLE_OFFSET", "\"" + "${TITLEOFFSET}" + "\""
+        buildConfigField "String", "ADDRESS_OFFSET", "\"" + "${ADDRESSOFFSET}" + "\""
+        buildConfigField "String", "REFINED_ADDRESS_OFFSET", "\"" + "${REFINEDADDRESSOFFSET}" + "\""
+        buildConfigField "String", "PHONE_OFFSET", "\"" + "${PHONEOFFSET}" + "\""
+        externalNativeBuild {
+            cmake {
+                cppFlags ''
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    buildFeatures {
+        viewBinding true
+        buildConfig true
+        compose true
+    }
+    packaging {
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+        }
+    }
+    externalNativeBuild {
+        cmake {
+            path file('src/main/cpp/CMakeLists.txt')
+            version '3.22.1'
+        }
+    }
+}
+
+dependencies {
+    implementation libs.appcompat
+    implementation libs.material
+    implementation libs.constraintlayout
+    implementation libs.play.services.maps
+    implementation libs.play.services.location
+    implementation libs.google.maps.services
+    implementation libs.places
+    implementation libs.opencsv
+    implementation libs.navigation.fragment
+    implementation libs.navigation.ui
+    implementation libs.activity
+    implementation libs.android.maps.utils
+    implementation libs.lifecycle.runtime.ktx
+    implementation libs.activity.compose
+    implementation platform(libs.compose.bom)
+    implementation libs.ui
+    implementation libs.ui.graphics
+    implementation libs.ui.tooling.preview
+    implementation libs.media3.common
+    implementation libs.filament.android
+    implementation libs.okhttp
+    implementation libs.gson
+    implementation libs.retrofit2.retrofit
+    implementation libs.converter.gson
+    implementation libs.commons.lang3
+    if("${FIREBASE}" == "true") {
+        implementation platform(libs.firebase.bom)
+        implementation libs.google.firebase.config
+        implementation libs.google.firebase.analytics
+    }
+    implementation libs.androidx.security.crypto
+    implementation libs.rootbeer.lib
+    testImplementation libs.junit
+    androidTestImplementation libs.ext.junit
+    androidTestImplementation libs.espresso.core
+    androidTestImplementation platform(libs.compose.bom)
+    androidTestImplementation libs.ui.test.junit4
+    debugImplementation libs.ui.tooling
+    debugImplementation libs.ui.test.manifest
+}
+
+//gradleLint {
+//    rules = ['unused-dependency']
+//}

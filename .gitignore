@@ -1,0 +1,27 @@
+# Generic
+*.iml
+.gradle
+.idea/
+.DS_Store
+build/
+captures/
+.externalNativeBuild
+.cxx
+local.properties
+gradle.properties
+google-services.json
+*.log
+*.apk
+output.json
+misc.xml
+deploymentTargetDropDown.xml
+render.experimental.xml
+*.jks
+*.keystore
+*.hprof
+
+# Project Specific
+api.dat
+Z.bat
+branches.csv
+customers.csv

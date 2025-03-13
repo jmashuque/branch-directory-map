@@ -1,0 +1,315 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".MainActivity">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/layout_searchview"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <ImageButton
+            android:id="@+id/button_menu"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_menu"
+            android:layout_marginStart="8dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent" />
+
+        <com.example.branchdirectorymap.CustomSearchView
+            android:id="@+id/searchView"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:iconifiedByDefault="false"
+            android:queryHint="Search here..."
+            app:layout_constraintStart_toEndOf="@id/button_menu"
+            app:layout_constraintEnd_toStartOf="@+id/spinner_search"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent" />
+
+        <Spinner
+            android:id="@+id/spinner_search"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:background="@drawable/searchspinner_background"
+            android:layout_marginEnd="8dp"
+            app:layout_constraintDimensionRatio="1:1"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@+id/searchView"
+            app:layout_constraintTop_toTopOf="parent" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <RelativeLayout
+        android:id="@+id/layout_map"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/layout_searchview" >
+
+        <fragment
+            android:id="@+id/map_fragment"
+            android:name="com.google.android.gms.maps.SupportMapFragment"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <View
+            android:id="@+id/invisible_anchor"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_centerInParent="true"
+            android:layout_marginBottom="0dp" />
+
+        <LinearLayout
+            android:id="@+id/layout_marker_buttons"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerHorizontal="true"
+            android:layout_below="@id/invisible_anchor"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:visibility="gone"
+            android:elevation="10dp">
+
+            <Button
+                android:id="@+id/button_marker_view"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:text="View in Maps"
+                android:background="@drawable/info_window_background" />
+
+            <Button
+                android:id="@+id/button_marker_add"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginTop="2dp"
+                android:text="Add to Route"
+                android:background="@drawable/info_window_background" />
+
+            <Button
+                android:id="@+id/button_marker_remove"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginTop="2dp"
+                android:text="Remove from Route"
+                android:background="@drawable/info_window_background" />
+
+            <Button
+                android:id="@+id/button_marker_call"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginTop="2dp"
+                android:text="Call Branch"
+                android:background="@drawable/info_window_background" />
+
+        </LinearLayout>
+
+    </RelativeLayout>
+
+    <TextView
+        android:id="@+id/textview_load"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:background="@drawable/info_window_background"
+        android:padding="16dp"
+        android:text="@string/loading"
+        android:textColor="@android:color/white"
+        android:textSize="18sp" />
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/button_clear"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentEnd="true"
+        android:layout_margin="12dp"
+        app:backgroundTint="@color/lightgrey"
+        android:src="@drawable/ic_close"
+        android:visibility="gone" />
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/button_route"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentBottom="true"
+        android:layout_margin="12dp"
+        app:backgroundTint="@color/lightgrey"
+        android:src="@drawable/ic_route" />
+
+    <LinearLayout
+        android:id="@+id/menu_route"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentLeft="true"
+        android:background="@color/lightgrey">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:text="Route Options"
+            android:textColor="@color/black"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:paddingLeft="8dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/textview_traffic"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Traffic"
+                android:layout_gravity="center_vertical|left"
+                android:layout_weight="1"
+                android:textColor="@color/black"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <Spinner
+                android:id="@+id/spinner_traffic"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical|right" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingLeft="8dp"
+            android:paddingRight="8dp"
+            android:orientation="horizontal">
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switch_highways"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Highways"
+                android:textColor="@color/black"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switch_tolls"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Tolls"
+                android:textColor="@color/black"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switch_ferries"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Ferries"
+                android:textColor="@color/black"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/button_layers"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentEnd="true"
+        android:layout_alignParentBottom="true"
+        android:layout_margin="12dp"
+        app:backgroundTint="@color/lightgrey"
+        android:src="@drawable/ic_layer" />
+
+    <LinearLayout
+        android:id="@+id/menu_layers"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentRight="true"
+        android:background="@color/lightgrey">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:text="Map Options"
+            android:textColor="@color/black"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:paddingLeft="8dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/textview_appearance"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Map Type"
+                android:layout_gravity="center_vertical|left"
+                android:layout_weight="1"
+                android:textColor="@color/black"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <Spinner
+                android:id="@+id/spinner_appearance"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical|right" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:paddingLeft="8dp"
+            android:paddingRight="8dp"
+            android:orientation="horizontal">
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switch_traffic"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Traffic"
+                android:textColor="@color/black"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switch_dark"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Dark"
+                android:textColor="@color/black"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</RelativeLayout>
