@@ -7,6 +7,8 @@ This project and associated README file are under active development and project
 - [Overview](#overview)
 - [Features](#features)
 - [Requirements](#requirements)
+- [Roadmap](#roadmap)
+- [Changelog](#changelog)
 
 ## Overview
 
@@ -14,17 +16,36 @@ Branch Directory Map is my latest Android app, coded mostly in Java using Androi
 
 ## Features
 
+- use either Directions API for simple routing (uses one request call) or advanced routing features using Routes API (uses two request calls)
+- ability to bundle .db files with release with pre-geocoded markers so users don't need to geocode (very costly for hundreds of markers)
 - uses EncryptedSharedPreferences to store API key for HTTPS requests, since this key cannot be secured without a backend proxy
 - conditional approach to dependencies/imports so you can either implement Firebase Remote Config or Java NDK C++ obfuscation to retrieve the insecure API key
-- use either Directions API for simple routing or advanced routing features using Routes API
 - includes two sample CSV files in assets folder, with a sample gradle.properties.example file with the right settings to geocode/map the locations in the CSV files
-- uses [RootBeer](https://github.com/scottyab/rootbeer) to prevent root access to further protect the insecure requests API key
+- uses [RootBeer](https://github.com/scottyab/rootbeer) to prevent root access and denies debugging mode to further protect the insecure requests API key
 
 ## Requirements
 
-- Android 6.0 Marshmallow (API 23) or later required to use EncryptedSharedPreferences
+- Android 6.0 Marshmallow (API 23) or later required to use `EncryptedSharedPreferences`
 - Google Cloud account (free to make, requires valid credit card, must create a new project)
 - Two Google API keys, one secure and restricted to the app's name and SHA-1, the other insecure and restricted to Google Directions/Geocoding/Routes API's
 - To protect insecure API key: either a Firebase account (must create a new project to not link with Google Cloud) with Remote Config, or Java NDK for C++ obfuscation
 - File called api.dat in your root project folder with the app API key on the first line, and if using NDK then the requests API key on the second line
 - RootBeer (from Maven Central, doesn't require additional setup)
+
+## Roadmap
+
+- further fields in the database including notes such as "new branch" or "branch closed"
+- ability to track users from Firebase
+- user feedback through Firebase to report wrong information or address changes
+- distribute .db files through Firebase so users don't have to geocode anything themselves, preventing further API costs
+- backend proxy option in the works for securing the requests API key
+- Eventually a Flutter version for iOS implementation
+
+## Changelog
+
+### 0.1-alpha1 (2025-03-13)
+- initial release
+
+## Thank You
+
+Thank you for checking out this project. If you're interesting in collaborating on this project or creating a fork, feel free to reach out to me by sending me an [email](mailto:r_b_inc@yahoo.ca?subject=%5BGITHUB-SAFE%5D). And if you're an employer looking to integrate this app into your fleet and distribute it to drivers, I am available for consulting to provide support and deployment help.
