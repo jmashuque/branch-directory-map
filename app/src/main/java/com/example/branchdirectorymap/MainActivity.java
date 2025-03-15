@@ -18,78 +18,82 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
-import com.scottyab.rootbeer.RootBeer;
-
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "SYS-MAIN";
     private static final int REQUEST_CODE = 101;
     private BranchDirectoryMap app;
     private DialogUtils dialogUtils;
-    private boolean locationPermissionGranted = false;
     private boolean doubleBackToExitPressedOnce = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-        dialogUtils = new DialogUtils(this);
-
-        RootBeer rootBeer = new RootBeer(this);
-        if (rootBeer.isRooted() || Debug.isDebuggerConnected()) {
-            dialogUtils.showOkDialog("Fatal Error", getString(R.string.root_error),
-                    new DialogInterface.OnClickListener() {
-                        @Override
-                        public void onClick(DialogInterface dialog, int id) {
-                            finish();
-                        }
-                    });
-        }
-
         setContentView(R.layout.activity_main);
+        dialogUtils = new DialogUtils(this);
+        Log.i(TAG, "MainActivity started");
+
+        if (!BuildConfig.ALLOW_ROOT) {
+            try {
+                Class<?> rootBeerClass = Class.forName("com.scottyab.rootbeer.RootBeer");
+                java.lang.reflect.Constructor<?> constructor = rootBeerClass.getConstructor(Context.class);
+                Object rootBeerInstance = constructor.newInstance(this);
+                java.lang.reflect.Method isRootedMethod = rootBeerClass.getMethod("isRooted");
+                boolean isRooted = (Boolean) isRootedMethod.invoke(rootBeerInstance);
+
+                if (isRooted || Debug.isDebuggerConnected()) {
+                    dialogUtils.showOkDialog("Fatal Error", getString(R.string.root_error),
+                            new DialogInterface.OnClickListener() {
+                                @Override
+                                public void onClick(DialogInterface dialog, int id) {
+                                    finish();
+                                }
+                            });
+                } else {
+                    Log.i(TAG, "Root check passed");
+                    firstStep();
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error checking for root: " + e);
+                finish();
+            }
+        } else {
+            Log.i(TAG, "ROOT CHECK SKIPPED");
+            firstStep();
+        }
+    }
+
+    private void firstStep() {
+        Log.i(TAG, "firstStep()");
 
         app = (BranchDirectoryMap) getApplication();
 
         getPermissions();
-        Log.i(TAG, "MainActivity created");
-        if (locationPermissionGranted) {
-            toNextActivity();
-        }
     }
 
-    private void toNextActivity() {
+    private void secondStep() {
+        Log.i(TAG, "secondStep()");
         SharedPreferences sharedPreferences = getSharedPreferences(app.SHARED_PREFS, Context.MODE_PRIVATE);
         if (sharedPreferences.getBoolean(app.KEY_USE_LAST, false)) {
             if (!sharedPreferences.getBoolean(app.KEY_LOAD_FINISHED, false)) {
-//                Log.i(TAG, "scenario1");
-//                gotoNext(true);
-//            } else {
-                Log.i(TAG, "scenario2");
                 dialogUtils.showOkDialog("Warning", getString(R.string.file_not_loaded),
                         new DialogInterface.OnClickListener() {
                             @Override
                             public void onClick(DialogInterface dialog, int id) {
-                                gotoNext();
+                                thirdStep();
                             }
                         });
+            } else {
+                thirdStep();
             }
-//        } else {
-//            Log.i(TAG, "scenario3");
-//            if (sharedPreferences.contains(MapsActivity.KEY_LOAD_ORDER)) {
-//                Log.i(TAG, "scenario4");
-//                gotoNext(true);
-//            } else {
-//                gotoNext(false);
-//            }
+        } else {
+            thirdStep();
         }
-        gotoNext();
     }
 
-    private void gotoNext() {
+    private void thirdStep() {
+        Log.i(TAG, "thirdStep()");
         Intent intent = new Intent(this, FileSelectionActivity.class);
-//        if (useLast) {
-//            intent.putExtra("skipToNextActivity", true);
-//        }
         startActivity(intent);
         finish();
     }
@@ -98,7 +102,7 @@ public class MainActivity extends AppCompatActivity {
         if (ContextCompat.checkSelfPermission(this.getApplicationContext(),
                 android.Manifest.permission.ACCESS_FINE_LOCATION)
                 == PackageManager.PERMISSION_GRANTED) {
-            locationPermissionGranted = true;
+            secondStep();
         } else {
             ActivityCompat.requestPermissions(this, new String[]{
                     android.Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_CODE);
@@ -107,16 +111,17 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-//        locationPermissionGranted = false;
         if (requestCode == REQUEST_CODE) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                locationPermissionGranted = true;
-                toNextActivity();
+                secondStep();
+            } else {
+                super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+                TextView textView = findViewById(R.id.textView_location);
+                textView.setText(R.string.location_warn);
             }
         } else {
-            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-            TextView textView = findViewById(R.id.textView_location);
-            textView.setText(R.string.location_warn);
+            Log.e(TAG, "Unknown request code, not anticipated: " + requestCode);
+            finish();
         }
     }
 

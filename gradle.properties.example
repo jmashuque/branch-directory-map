@@ -32,6 +32,9 @@ android.useAndroidX=true
 # thereby reducing the size of the R class for that library
 android.nonTransitiveRClass=true
 
+# Use the following to help with upgrading to gradle 9.0 later
+# org.gradle.warning.mode=all
+
 # USER BUILD SETTINGS
 
 # (int)[] x-index(es) of address column
@@ -43,7 +46,7 @@ ADDRESSOFFSET=0,0
 # (bool) use double query for traffic metrics
 ADVANCEDROUTES=true
 
-# (bool) allow duplicate markers
+# (bool) allow more than one marker to occupy the same latitude/longitude coordinates
 ALLOWDUPLICATES=false
 
 # (int) minimum delay between queries, do not exceed 50 requests / second for free tier
@@ -94,7 +97,7 @@ IGNOREROWSEND=0,0
 # (int) max number of intermediate markers, current api limit of 25
 INTERMEDIATES=25
 
-# (int) max number of threads to use, do not overload with requests
+# (int) max number of threads to use for geocode requests, do not overload Google servers
 MAXTHREADS=2
 
 # (int) min number of markers in a cluster
@@ -125,6 +128,9 @@ REFINEDADDRESSINDEX=2,2
 # (int)[] y-index(es) of refined address column
 REFINEDADDRESSOFFSET=0,0
 
+# (bool) allow root access
+ROOT=false
+
 # (int)[] number of rows per set
 ROWSPERSET=1,1
 
@@ -142,41 +148,4 @@ TITLEINDEX=0,0
 TITLEOFFSET=0,0
 
 # (float)[] ratio for light, moderate, heavy, and severe traffic
-TRAFFICMETRICS=1.05,1.15,1.25,1.45
-
-# my settings
-ADDRESSINDEX=0,5
-ADDRESSOFFSET=1,0
-ADVANCEDROUTES=true
-BASEDELAY=10
-CODEDELIM=/,
-CODEPREFIX=C2,
-COLOURS=red,green
-COLUMNSPERROW=9,6
-DBFILE=markers.db
-DEFAULTFILE=
-DELIM=" ",
-EMBEDDED=true
-EMBEDDEDDB=markers.db
-EXPORT=false
-FILENAMES=
-FIREBASE=true
-IGNOREROWSBEGIN=1,1
-IGNOREROWSEND=10,0
-INTERMEDIATES=25
-MAXTHREADS=2
-MINCLUSTERSIZE=5
-MULTIROWSETS=true,false
-PHONE=true,false
-PHONEINDEX=2,0
-PHONEOFFSET=0,0
-RANDOMDELAY=50
-REFINED=true,false
-REFINEDADDRESSINDEX=1,0
-REFINEDADDRESSOFFSET=1,0
-ROWSPERSET=2,1
-SETTINGSPERFILE=true
-TIMEOUT=10
-TITLEINDEX=0,0
-TITLEOFFSET=0,0
 TRAFFICMETRICS=1.05,1.15,1.25,1.45

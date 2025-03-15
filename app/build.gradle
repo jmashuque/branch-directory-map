@@ -7,41 +7,48 @@ android {
     namespace 'com.example.branchdirectorymap'
     compileSdk 35
 
+    ext {
+        hexEncodedApiKey = ""
+    }
+
     defaultConfig {
         applicationId "com.example.branchdirectorymap"
         minSdk 23
         targetSdk 35
         versionCode 1
-        versionName "0.1-alpha1"
+        versionName "0.1-alpha2"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         def apiFile = rootProject.file("api.dat")
         def mapsApiKey = "DEFAULT_MAPS_KEY"
         def linkApiKey = "DEFAULT_LINK_KEY"
-
         if(apiFile.exists()){
             def lines = apiFile.readLines()
             if(lines.size() >= 1){
                 mapsApiKey = lines[0].trim()
             }
-
             if("${FIREBASE}" == "false" && lines.size() >= 2){
                 linkApiKey = lines[1].trim()
-                def hexEncodedApiKey = linkApiKey.bytes.encodeHex().toString()
+                hexEncodedApiKey = linkApiKey.bytes.encodeHex().toString()
                 buildConfigField "boolean", "USE_FIREBASE", "false"
                 externalNativeBuild {
                     cmake {
                         arguments "-DGOOGLE_API_KEY_HEX=${hexEncodedApiKey}"
+                        cppFlags ''
                     }
                 }
             } else {
                 buildConfigField "boolean", "USE_FIREBASE", "true"
             }
         }
-
         manifestPlaceholders = [MAPS_API_KEY: mapsApiKey]
 
+        if ("${ROOT}" == "true") {
+            buildConfigField "boolean", "ALLOW_ROOT", "true"
+        } else {
+            buildConfigField "boolean", "ALLOW_ROOT", "false"
+        }
         buildConfigField "String", "EMBEDDED_DB", "\"" + "${EMBEDDEDDB}" + "\""
         if ("${EMBEDDED}" == "true") {
             buildConfigField "boolean", "EMBEDDED_FILE", "true"
@@ -113,13 +120,7 @@ android {
         buildConfigField "String", "ADDRESS_OFFSET", "\"" + "${ADDRESSOFFSET}" + "\""
         buildConfigField "String", "REFINED_ADDRESS_OFFSET", "\"" + "${REFINEDADDRESSOFFSET}" + "\""
         buildConfigField "String", "PHONE_OFFSET", "\"" + "${PHONEOFFSET}" + "\""
-        externalNativeBuild {
-            cmake {
-                cppFlags ''
-            }
-        }
     }
-
     buildTypes {
         release {
             minifyEnabled true
@@ -140,10 +141,12 @@ android {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
         }
     }
-    externalNativeBuild {
-        cmake {
-            path file('src/main/cpp/CMakeLists.txt')
-            version '3.22.1'
+    if("${FIREBASE}" == "false") {
+        externalNativeBuild {
+            cmake {
+                path file('src/main/cpp/CMakeLists.txt')
+                version '3.22.1'
+            }
         }
     }
 }
@@ -174,13 +177,13 @@ dependencies {
     implementation libs.retrofit2.retrofit
     implementation libs.converter.gson
     implementation libs.commons.lang3
+    implementation libs.androidx.security.crypto
+    implementation libs.rootbeer.lib
     if("${FIREBASE}" == "true") {
         implementation platform(libs.firebase.bom)
         implementation libs.google.firebase.config
         implementation libs.google.firebase.analytics
     }
-    implementation libs.androidx.security.crypto
-    implementation libs.rootbeer.lib
     testImplementation libs.junit
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.espresso.core
@@ -189,7 +192,3 @@ dependencies {
     debugImplementation libs.ui.tooling
     debugImplementation libs.ui.test.manifest
 }
-
-//gradleLint {
-//    rules = ['unused-dependency']
-//}

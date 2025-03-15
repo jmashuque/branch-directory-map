@@ -1,13 +1,15 @@
 # Branch Directory Map
 
-This project and associated README file are under active development and projected to change at any time.
+This project and associated README file are under active development and may change at any time. Please consider watching 
 
 ## Table of Contents
 
 - [Overview](#overview)
 - [Features](#features)
 - [Requirements](#requirements)
+- [Installation](#installation)
 - [Roadmap](#roadmap)
+- [Security](#security)
 - [Changelog](#changelog)
 
 ## Overview
@@ -17,31 +19,61 @@ Branch Directory Map is my latest Android app, coded mostly in Java using Androi
 ## Features
 
 - use either Directions API for simple routing (uses one request call) or advanced routing features using Routes API (uses two request calls)
-- ability to bundle .db files with release with pre-geocoded markers so users don't need to geocode (very costly for hundreds of markers)
+- CSV or DB files can either be hard-coded with the app or read from a file by the user using `ActivityResultContracts.GetContent()`
+- geocode using either just address, or address + postal code, or Google plus codes (if detected)
+- ability to bundle DB files with release with pre-geocoded markers so users don't need to geocode (very costly for hundreds of markers)
+- export DB file to Downloads folder once all markers have been geocoded
 - uses EncryptedSharedPreferences to store API key for HTTPS requests, since this key cannot be secured without a backend proxy
 - conditional approach to dependencies/imports so you can either implement Firebase Remote Config or Java NDK C++ obfuscation to retrieve the insecure API key
 - includes two sample CSV files in assets folder, with a sample gradle.properties.example file with the right settings to geocode/map the locations in the CSV files
-- uses [RootBeer](https://github.com/scottyab/rootbeer) to prevent root access and denies debugging mode to further protect the insecure requests API key
+- optionally uses [RootBeer](https://github.com/scottyab/rootbeer) (by [Scott Alexander-Bown](https://github.com/scottyab)) to prevent root access and denies debugging mode to further protect the insecure requests API key
 
 ## Requirements
 
-- Android 6.0 Marshmallow (API 23) or later required to use `EncryptedSharedPreferences`
+- Android 6.0 Marshmallow (API 23) or later required (to use `EncryptedSharedPreferences`)
 - Google Cloud account (free to make, requires valid credit card, must create a new project)
-- Two Google API keys, one secure and restricted to the app's name and SHA-1, the other insecure and restricted to Google Directions/Geocoding/Routes API's
-- To protect insecure API key: either a Firebase account (must create a new project to not link with Google Cloud) with Remote Config, or Java NDK for C++ obfuscation
-- File called api.dat in your root project folder with the app API key on the first line, and if using NDK then the requests API key on the second line
-- RootBeer (from Maven Central, doesn't require additional setup)
+- two Google API keys, one secure and restricted to the app's name and SHA-1, the other insecure and restricted to Google Directions/Geocoding/Routes API's
+- to protect insecure API key: either a Firebase account (must create a new project to not link with Google Cloud) with Remote Config, or Java NDK for C++ obfuscation
+- file called `api.dat` in your root project folder with the app API key on the first line, and if using NDK then the requests API key on the second line
+- RootBeer (optional, from Maven Central, doesn't require additional setup)
+
+## Installation
+
+Detailed instructions coming soon. For now just clone the repository, unzip it, and load the folder as a project in Android Studio. Then, copy all of `gradle.properties.example` into the auto-generated `gradle.properties` file, and either use the example values and CSV files or make your own configuration and add your CSV files to `app\src\main\assets`. You are now ready to compile and run your first build.
 
 ## Roadmap
 
-- further fields in the database including notes such as "new branch" or "branch closed"
-- ability to track users from Firebase
-- user feedback through Firebase to report wrong information or address changes
-- distribute .db files through Firebase so users don't have to geocode anything themselves, preventing further API costs
+- ability to convert XLSX files to CSV in the app
+- further fields in the database also parsed from the CSV, including notes, hours of operation, manager, etc.
+- ability to track users from Firebase for authentication
+- unit testing and release configuration including key signing
+- user feedback through Firebase to report wrong information, address changes, new branches to add, or bugs
+- distribute DB files through Firebase so users don't have to geocode anything themselves, preventing further API costs
 - backend proxy option in the works for securing the requests API key
-- Eventually a Flutter version for iOS implementation
+- eventually a Flutter version for iOS implementation
+- usage of the Places API to be able to select addresses on the map
+- possible hidden debug menu for easy developer access to functions and being able to override build parameters
+- maybe Firebase App Check if I ever figure out how to implement it without Play Integrity
+
+## Security
+
+Due to how Google allows usage of its API keys, this app utilizes two API keys. The first is hard-coded in the APK at build time, making it completely exposed. This key is used to render the map fragment. You need to ensure this key is restricted to this app's package name and SHA-1 fingerprint. And the second key is fetched from either Firebase Remote Config or Java NDK, depending on build settings, so this key is at least partially exposed. This key is used for Directions/Geocoding/Routes API requests, so unfortunately this key has to exist as an unencrypted string at some points in the app's lifecycle. For this reason it is highly recommended to use Firebase Remote Config instead of Java NDK. You should also restrict this key to the three API's mentioned. Both API keys are susceptible to being decompiled or leaked from memory inspection, and unfortunately until a backend proxy is implemented this will continue to be an issue. I also highly recommend you set up budget alerts on your Google Cloud billing account for your project, including setting up a Pub/Sub topic to automate shutting down API's before your budget threshold reaches 100%, consult Google's documentation for further information. And lastly, the `api.dat` file must never be committed to a repository, which is why it is already in `.gitignore`.
 
 ## Changelog
+
+### 0.1-alpha2 (2025-03-14)
+- feature: conditional deployment of RootBeer, but still highly recommended to use in your build
+- major fix: fatal error when using Firebase Remote Config that caused CMake to run and fail, CMake is now properly conditional
+- fix: gradle lint implementation and `gradle.properties.example` file
+- fix: MainActivity logic and RootBeer implementation
+- fix: deselecting a marker now cancels `getInformationTask()`
+- upgrade: android gradle plugin to 8.9.0
+- revised: used Gemini to generate better real-world addresses for sample CSV asset files
+- revised: `libs.versions.toml` to remove unused dependencies and update active ones
+- revised: `.gitignore` improved for readability
+- upcoming: marker icons will render with a letter to show position if on the route
+- upcoming: ability to display all marker tables together
+- upcoming: revised database scheme to help geocode better including mandatory full-format postal codes and separate plus codes
 
 ### 0.1-alpha1 (2025-03-13)
 - initial release

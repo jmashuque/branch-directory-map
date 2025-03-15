@@ -383,8 +383,7 @@ public class FileSelectionActivity extends AppCompatActivity {
             showDialog();
         } else {
             Log.i(TAG, "embedded db conf loaded, will override");
-            editor.putBoolean(app.KEY_LOAD_OVERRIDE, true);
-            editor.apply();
+            editor.putBoolean(app.KEY_LOAD_OVERRIDE, true).apply();
             callNextActivity();
         }
     }
@@ -408,8 +407,7 @@ public class FileSelectionActivity extends AppCompatActivity {
                 @Override
                 public void onClick(DialogInterface dialog, int id) {
 //                        Log.i(TAG, "case3.2");
-                    editor.putBoolean(app.KEY_USE_LAST, true);
-                    editor.apply();
+                    editor.putBoolean(app.KEY_USE_LAST, true).apply();
                     dialog.dismiss();
                     callNextActivity();
                 }
@@ -418,8 +416,7 @@ public class FileSelectionActivity extends AppCompatActivity {
                 @Override
                 public void onClick(DialogInterface dialog, int id) {
 //                        Log.i(TAG, "case3.3");
-                    editor.putBoolean(app.KEY_USE_LAST, false);
-                    editor.apply();
+                    editor.putBoolean(app.KEY_USE_LAST, false).apply();
                     dialog.dismiss();
                     callNextActivity();
                 }

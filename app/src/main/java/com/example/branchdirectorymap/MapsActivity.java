@@ -995,14 +995,13 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         } else {
             callMarkerButton.setVisibility(View.GONE);
         }
-        if (currentItem.getSelected()) {
+        // FIX THIS: add ability to add marker to route multiple times
+        if (currentItem.getSelected() > -1) {
             addMarkerButton.setVisibility(View.GONE);
             removeMarkerButton.setVisibility(View.VISIBLE);
-//            lastSelected = true;
         } else {
             addMarkerButton.setVisibility(View.VISIBLE);
             removeMarkerButton.setVisibility(View.GONE);
-//            lastSelected = false;
         }
         getCurrentLocation(this::GetInformationTaskCreator);
         mMap.animateCamera(CameraUpdateFactory.newLatLng(currentMarker.getPosition()), new GoogleMap.CancelableCallback() {
@@ -1031,7 +1030,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             routeMarkers.get(currentMarker.getTitle()).add(currentMarker);
             routeMarkers.get(currentMarker.getTitle()).add(currentItem);
             routeMarkers.get(currentMarker.getTitle()).add(new LatLng(currentMarker.getPosition().latitude, currentMarker.getPosition().longitude));
-            currentItem.setSelected(true);
+            currentItem.setSelected(0);
             lastSelected = true;
             addMarkerButton.setVisibility(View.GONE);
             removeMarkerButton.setVisibility(View.VISIBLE);
@@ -1045,7 +1044,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     public void removeMarkerFromRoute() {
         routeMarkers.remove(currentMarker.getTitle());
-        currentItem.setSelected(false);
+        currentItem.setSelected(-1);
         lastSelected = false;
         addMarkerButton.setVisibility(View.VISIBLE);
         removeMarkerButton.setVisibility(View.GONE);
@@ -1062,9 +1061,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     public void clearRoute() {
         for (String key : routeMarkers.keySet()) {
             MyItem item = (MyItem) routeMarkers.get(key).get(1);
-            item.setSelected(false);
+            item.setSelected(-1);
         }
-//        lastSelected = false;
         routeMarkers.clear();
         clearRouteButton.setVisibility(View.GONE);
         addMarkerButton.setVisibility(View.VISIBLE);
@@ -1173,12 +1171,13 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     @Override
     public void onInfoWindowClose(@NonNull Marker marker) {
         Log.i(TAG, "onInfoWindowClose");
+        getInformationTask.cancel(true);
         clearPolys();
         markerButtonsLayout.setVisibility(View.GONE);
         infoWindowOpen = false;
         tempMarker = currentMarker;
         currentMarker = null;
-        lastSelected = currentItem.getSelected();
+        lastSelected = currentItem.getSelected() > -1;
         if (searchView.getQuery().length() != 0) {
             searchView.setQuery("", false);
             searchView.clearFocus();
@@ -1448,7 +1447,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 geocoderMaps = deepCopy3d(missingMaps);
                 missingMaps.clear();
             }
-            Log.i(TAG, "geocoderMaps: " + geocoderMaps.toString());
+//            Log.i(TAG, "geocoderMaps: " + geocoderMaps.toString());
             linkApiKey = Secrets.getStoredGeocodeApiKey(activity.getApplicationContext());
             for (String table : geocoderMaps.keySet()) {
                 Log.i(TAG, "table: " + table);
@@ -1493,18 +1492,12 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     executor.submit(() -> {
                         try {
                             if (!finalAddress.isEmpty()) {
-                                // simulate fails to test reloading
-//                                String linkTestKey = linkApiKey;
-//                                Random rand = new Random();
-//                                if (rand.nextInt(100) < 10) {
-//                                    linkTestKey="INVALID_FOR_TESTING_PURPOSES";
-//                                }
                                 service.getGeocode(finalAddress, linkApiKey).enqueue(new Callback<GeocodingResponse>() {
                                     @Override
                                     public void onResponse(Call<GeocodingResponse> call, retrofit2.Response<GeocodingResponse> response) {
                                         if (response.isSuccessful() && response.body() != null && !response.body().getResults().isEmpty()) {
                                             if (response.body().getResults().size() > 1) {
-                                                Log.i(TAG, "More than one result found for: " + finalAddress);
+                                                Log.i(TAG, "More than one result found for: " + finalAddress + " in table: " + table);
                                             }
                                             GeocodingResponse.Result.Geometry.Location location = response.body().getResults().get(0).getGeometry().getLocation();
                                             if (BuildConfig.ALLOW_DUPLICATES || tracker.addLatLng(location.getLat(), location.getLng())) {
@@ -1636,7 +1629,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 db.endTransaction();
                 db.close();
             }
-            Log.i(TAG, "getvarmapstr: " + dbHelper.getVarMapStr(true));
+//            Log.i(TAG, "getvarmapstr: " + dbHelper.getVarMapStr(true));
             if (BuildConfig.EXPORT_DB && sharedPreferences.getBoolean(app.KEY_LOAD_FINISHED, false)) {
                 dbHelper.exportDatabase(BuildConfig.DATABASE_NAME);
             }
@@ -1770,7 +1763,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
         @Override
         protected Object[] doInBackground(Void... voids) {
-            if (!currentItem.getSelected()) {
+            if (currentItem.getSelected() == -1) {
                 OkHttpClient client = new OkHttpClient();
                 if (!BuildConfig.USE_ADVANCED_ROUTING) {
                     String url = app.BASE_URL + "directions/json"

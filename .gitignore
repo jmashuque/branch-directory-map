@@ -1,21 +1,21 @@
 # Generic
-*.iml
-.gradle
-.idea/
-.DS_Store
 build/
 captures/
-.externalNativeBuild
-.cxx
+.gradle/
+.idea/
+.externalNativeBuild/
+.cxx/
+.DS_Store
 local.properties
 gradle.properties
 google-services.json
-*.log
-*.apk
 output.json
 misc.xml
 deploymentTargetDropDown.xml
 render.experimental.xml
+*.iml
+*.log
+*.apk
 *.jks
 *.keystore
 *.hprof
@@ -25,4 +25,4 @@ api.dat
 Z.bat
 branches.csv
 customers.csv
-markers.db
+markers2.db

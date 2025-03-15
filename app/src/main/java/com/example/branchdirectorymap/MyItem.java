@@ -22,7 +22,7 @@ public class MyItem implements ClusterItem, Parcelable {
     private final String phone;     // phone number
     private final String colour;    // marker colour
     private final float hue;        // marker hue, derived from colour
-    private boolean selected;       // whether the marker is selected
+    private int selected;           // whether the marker is selected
 
     public MyItem(double lat, double lng, String code, String name, String snippet, String refined, String phone, String colour) {
         this.position = new LatLng(lat, lng);
@@ -33,7 +33,7 @@ public class MyItem implements ClusterItem, Parcelable {
         this.phone = phone;
         this.colour = colour;
         this.hue = calcClr(colour);
-        this.selected = false;
+        this.selected = -1;
     }
 
     // Parcelable implementation
@@ -46,7 +46,7 @@ public class MyItem implements ClusterItem, Parcelable {
         phone = parcel.readString();
         colour = parcel.readString();
         hue = parcel.readFloat();
-        selected = parcel.readByte() != 0;      // CHECK
+        selected = parcel.readInt();
     }
 
     public static final Creator<MyItem> CREATOR = new Creator<MyItem>() {
@@ -112,14 +112,14 @@ public class MyItem implements ClusterItem, Parcelable {
         return colour;
     }
     public float getHue() {
-        return selected ? BitmapDescriptorFactory.HUE_BLUE : hue;
+        return selected > -1 ? BitmapDescriptorFactory.HUE_BLUE : hue;
     }
 
-    public boolean getSelected() {
+    public int getSelected() {
         return selected;
     }
 
-    public void setSelected(boolean selected) {
+    public void setSelected(int selected) {
         this.selected = selected;
     }
 

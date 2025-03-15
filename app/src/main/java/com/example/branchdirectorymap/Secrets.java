@@ -80,7 +80,7 @@ public class Secrets {
 
                     Handler timeoutHandler = new Handler(Looper.getMainLooper());
                     Runnable timeoutRunnable = () -> {
-                        Log.e(TAG, "Timeout: Failed to fetch API key within " + BuildConfig.TIMEOUT_S + "s");
+                        Log.e(TAG, "Timeout: Failed to fetch API key within " + BuildConfig.TIMEOUT_S + " seconds");
                         listener.onApiKeyReceived(false);
                     };
                     timeoutHandler.postDelayed(timeoutRunnable, BuildConfig.TIMEOUT_S * 1000);
@@ -109,12 +109,12 @@ public class Secrets {
                                             } catch (Exception e) {
                                                 e.printStackTrace(); // FIX THIS: add logging
                                             } finally {
-                                                Log.i(TAG, "Successfully fetched and stored key from Firebase");
+                                                Log.i(TAG, "Successfully fetched and stored API key from Firebase");
                                                 listener.onApiKeyReceived(true);
                                             }
                                         }
                                     } else {
-                                        Log.e(TAG, "Firebase fetch failed");
+                                        Log.e(TAG, "Firebase API key fetch failed");
                                         listener.onApiKeyReceived(false);
                                     }
                                 }
@@ -135,7 +135,7 @@ public class Secrets {
                     byte[] encryptedData = encrypt(apiKey, aesKey);
                     sharedPreferences.edit().putString(app.KEY_APIKEY,
                             Base64.encodeToString(encryptedData, Base64.DEFAULT)).apply();
-                    Log.i(TAG, "Successfully fetched and stored key from NativeLib");
+                    Log.i(TAG, "Successfully fetched and stored API key from NativeLib");
                     listener.onApiKeyReceived(true);
                 } else {
                     Log.e(TAG, "NativeLib returned an empty API key");
@@ -143,7 +143,7 @@ public class Secrets {
                 }
             }
         } catch (Exception e) {
-            throw new RuntimeException("Failed to retrieve/store Geocode API Key", e);
+            throw new RuntimeException("Failed to fetch or store Geocode API Key", e);
         }
     }
 
