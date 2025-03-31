@@ -5,7 +5,7 @@ import java.util.Objects;
 
 public class LatLngTracker {
 
-    private HashSet<LatLng> latLngSet;
+    private final HashSet<LatLng> latLngSet;
 
     public LatLngTracker() {
         latLngSet = new HashSet<>();

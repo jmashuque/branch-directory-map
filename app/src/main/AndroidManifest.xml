@@ -16,38 +16,41 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
         android:debuggable="false"
-        tools:targetApi="33">
+        tools:ignore="HardcodedDebugMode"
+        tools:targetApi="35">
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="${MAPS_API_KEY}" />
+        <meta-data
+            android:name="com.google.android.gms.maps.MAP_STYLE"
+            android:value="${GMS_MAP_ID}" />
 
         <activity
             android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
             android:exported="true"
             android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
         <activity
             android:name=".FileSelectionActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
             android:exported="false"
-            android:label="@string/title_activity_fileselection" />
+            android:label="@string/title_activity_file"
+            android:launchMode="singleTop">
+        </activity>
 
         <activity
             android:name=".MapsActivity"
-            android:configChanges="orientation"
+            android:configChanges="orientation|screenSize|keyboardHidden"
             android:exported="false"
             android:label="@string/title_activity_maps"
-            android:launchMode="singleTop"
-            android:screenOrientation="portrait">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-            </intent-filter>
+            android:launchMode="singleTop">
         </activity>
     </application>
 

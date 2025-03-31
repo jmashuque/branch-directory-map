@@ -8,53 +8,22 @@ import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+
 import java.util.List;
 
 public class SearchSpinnerAdapter extends ArrayAdapter<String> {
-    private Context context;
-    private List<String> items;
-//    private HashSet<String> uniqueItems;
+    private final Context context;
+    private final List<String> items;
     private int selectedItemPosition = -1;
 
     public SearchSpinnerAdapter(Context context, List<String> items) {
         super(context, 0, items);
         this.context = context;
         this.items = items;
-//        uniqueItems = new HashSet<>();
-//        uniqueItems.addAll(items);
-//        Log.i("SYS005", "uniqueItems: " + uniqueItems);
     }
 
-//    @Override
-//    public void addAll(String... newItems) {
-////        Log.i("SYS005", "addall1");
-//        List<String> newItemsCopy;
-//        newItemsCopy = new ArrayList<>(Arrays.asList(newItems));
-//        for (String item : newItemsCopy) {
-//            if (uniqueItems.add(item)) {
-//                super.add(item);
-//            }
-//        }
-//    }
-//
-//    public void addAll(List<String> newItems) {
-//        Log.i("SYS005", "addall2");
-//        Log.i("SYS005", "newItems: " + newItems);
-//        List<String> newItemsCopy;
-//        newItemsCopy = new ArrayList<>(newItems);
-//        for (String item : newItemsCopy) {
-//            if (uniqueItems.add(item)) {
-//                super.add(item);
-//            }
-//        }
-//    }
-
-    @Override
-    public void clear() {
-        super.clear();
-//        uniqueItems.clear();
-    }
-
+    @NonNull
     @Override
     public View getView(int position, View convertView, ViewGroup parent) {
         if (convertView == null) {

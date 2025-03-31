@@ -4,7 +4,6 @@ import android.content.Context;
 import android.graphics.Rect;
 import android.util.AttributeSet;
 import android.view.KeyEvent;
-import android.view.ViewTreeObserver;
 import android.view.inputmethod.InputMethodManager;
 import androidx.appcompat.widget.SearchView;
 
@@ -23,16 +22,13 @@ public class CustomSearchView extends SearchView {
     }
 
     private void init() {
-        getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
-            @Override
-            public void onGlobalLayout() {
-                Rect r = new Rect();
-                getWindowVisibleDisplayFrame(r);
-                int screenHeight = getRootView().getHeight();
-                int keypadHeight = screenHeight - r.bottom;
+        getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+            Rect r = new Rect();
+            getWindowVisibleDisplayFrame(r);
+            int screenHeight = getRootView().getHeight();
+            int keypadHeight = screenHeight - r.bottom;
 
-                isKeyboardOpen = keypadHeight > screenHeight * 0.15;
-            }
+            isKeyboardOpen = keypadHeight > screenHeight * 0.15;
         });
     }
 

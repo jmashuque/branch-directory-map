@@ -113,10 +113,7 @@ public class LocationDatabaseHelper extends SQLiteOpenHelper {
         try {
             cursor = db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name=?",
                     new String[]{tableName});
-            if (cursor != null && cursor.moveToFirst()) {
-                return true;
-            }
-            return false;
+            return cursor != null && cursor.moveToFirst();
         } finally {
             if (cursor != null) {
                 cursor.close();
@@ -267,9 +264,8 @@ public class LocationDatabaseHelper extends SQLiteOpenHelper {
 
             if (sd.canWrite()) {
                 String currentDBPath = context.getDatabasePath(BuildConfig.DATABASE_NAME).getPath();
-                String backupDBPath = databaseName;
                 File currentDB = new File(currentDBPath);
-                File backupDB = new File(sd, backupDBPath);
+                File backupDB = new File(sd, databaseName);
 
                 Log.i(TAG, "currentDB: " + currentDB.getAbsolutePath());
                 Log.i(TAG, "backupDB: " + backupDB.getAbsolutePath());

@@ -10,7 +10,6 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.maps.android.clustering.ClusterItem;
 
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 
 public class MyItem implements ClusterItem, Parcelable {
@@ -49,7 +48,7 @@ public class MyItem implements ClusterItem, Parcelable {
         selected = parcel.readInt();
     }
 
-    public static final Creator<MyItem> CREATOR = new Creator<MyItem>() {
+    public static final Creator<MyItem> CREATOR = new Creator<>() {
         @Override
         public MyItem createFromParcel(Parcel in) {
             return new MyItem(in);
@@ -62,7 +61,8 @@ public class MyItem implements ClusterItem, Parcelable {
     };
 
     private float calcClr (String colour) {
-        float clr = switch (colour) {
+        // blue reserved for route markers
+        return switch (colour) {
             case "azure" -> BitmapDescriptorFactory.HUE_AZURE;
             case "blue" -> BitmapDescriptorFactory.HUE_RED;  // blue reserved for route markers
             case "cyan" -> BitmapDescriptorFactory.HUE_CYAN;
@@ -74,7 +74,6 @@ public class MyItem implements ClusterItem, Parcelable {
             case "yellow" -> BitmapDescriptorFactory.HUE_YELLOW;
             default -> BitmapDescriptorFactory.HUE_RED;
         };
-        return clr;
     }
 
     @Override
@@ -145,14 +144,11 @@ public class MyItem implements ClusterItem, Parcelable {
     public static class MyItemSorter {
 
         public static List<MyItem> sortMyItemsByCode(List<MyItem> items) {
-            Collections.sort(items, new Comparator<MyItem>() {
-                @Override
-                public int compare(MyItem item1, MyItem item2) {
-                    if (item1.getCode().isEmpty() && item2.getCode().isEmpty()) {
-                        return item1.getName().compareTo(item2.getName());
-                    } else {
-                        return item1.getCode().compareTo(item2.getCode());
-                    }
+            Collections.sort(items, (item1, item2) -> {
+                if (item1.getCode().isEmpty() && item2.getCode().isEmpty()) {
+                    return item1.getName().compareTo(item2.getName());
+                } else {
+                    return item1.getCode().compareTo(item2.getCode());
                 }
             });
             return items;

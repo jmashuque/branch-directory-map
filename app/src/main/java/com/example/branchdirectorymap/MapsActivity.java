@@ -1,12 +1,13 @@
 package com.example.branchdirectorymap;
 
+import android.app.Activity;
 import android.app.SearchManager;
 import android.content.ContentValues;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.res.Resources;
 import android.database.Cursor;
 import android.database.MatrixCursor;
 import android.database.sqlite.SQLiteDatabase;
@@ -30,7 +31,6 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.Button;
-import android.widget.CompoundButton;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
@@ -39,7 +39,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.appcompat.widget.SearchView;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.core.app.ActivityCompat;
@@ -78,7 +77,7 @@ import com.google.maps.android.clustering.view.DefaultClusterRenderer;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.Serializable;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
@@ -109,29 +108,28 @@ import okhttp3.Response;
 import retrofit2.Call;
 import retrofit2.Callback;
 
-public class MapsActivity extends FragmentActivity implements OnMapReadyCallback, GoogleMap.OnInfoWindowCloseListener {
+public class MapsActivity extends FragmentActivity implements OnMapReadyCallback, GoogleMap.OnInfoWindowCloseListener, CustomInfoWindowAdapter.InfoWindowOpenListener {
 
     private static final String TAG = "SYS-MAPS";
-    private static final int REQUEST_CODE = 102;
-    private BranchDirectoryMap app;
+    private Context context;
     private GoogleMap mMap;
     private FusedLocationProviderClient fusedLocationClient;
     private DialogUtils dialogUtils;
     private boolean locationPermissionGranted = false;
     private String linkApiKey;
     private String varMapStr;
+    private List<String> stylesList;
+    private Map<String, MapStyleOptions> styles;
     private double[] trafficMetrics;
     private Map<String, Map<String, Object>> varMap;
-    private ArrayList<String> tables = new ArrayList<>();
-    private HashSet<String> tablesSet = new HashSet<>();
+    private final ArrayList<String> tables = new ArrayList<>();
+    private final HashSet<String> tablesSet = new HashSet<>();
     private MapLoaderTask task;
     private GetInformationTask getInformationTask;
     private Location lastKnownLocation;
-    private LocationCallback locationCallback;
     private ImageButton menuButton;
     private Spinner searchSpinner;
     private TextView loadTextView;
-    private RelativeLayout mapLayout;
     private LinearLayout markerButtonsLayout;
     private Button viewMarkerButton;
     private Button addMarkerButton;
@@ -143,47 +141,50 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private FloatingActionButton layersButton;
     private LinearLayout layersMenu;
     private SwitchCompat switchDark;
+    private SwitchCompat switchMono;
     private FloatingActionButton clearRouteButton;
-    private String infoText;
-    private SpannableString trafficText;
     private ClusterManager<MyItem> clusterManager;
     private CustomClusterRenderer customRenderer;
+    private CustomInfoWindowAdapter customAdapter;
     private Map<String, List<MyItem>> markers;
     private Marker currentMarker;
     private Marker tempMarker;
     private MyItem currentItem;
-    private Map<String, Map<MyItem, Marker>> clusterItemMarkerMap = new HashMap<>();
+    private final Map<String, Map<MyItem, Marker>> clusterItemMarkerMap = new HashMap<>();
     private SupportMapFragment mapFragment;
     private CustomSearchView searchView;
     private SimpleCursorAdapter suggestionAdapter;
-    private ArrayList<ArrayList<MyItem>> filteredSuggestions = new ArrayList<>();
-    private Map<String, ArrayList<Object>> routeMarkers = new LinkedHashMap<>();
-    private View mWindow;
+    private final ArrayList<ArrayList<MyItem>> filteredSuggestions = new ArrayList<>();
+    private final Map<String, ArrayList<Object>> routeMarkers = new LinkedHashMap<>();
     private LocationDatabaseHelper dbHelper;
     private SQLiteDatabase db;
     private SharedPreferences sharedPreferences;
     private SharedPreferences.Editor editor;
-    private String distance;
-    private String duration;
     private String oldDistance;
     private String oldDuration;
+    private String oldArrival;
     private List<List<String>> encodedPolyline;
     private List<List<String>> oldPolyline;
-    private List<Polyline> polylines = new ArrayList<>();
+    private final List<Polyline> polylines = new ArrayList<>();
     private SpannableString oldTrafficText;
+    private java.text.SimpleDateFormat sdf;
+    private Cluster<MyItem> lastCluster;
     private boolean lastSelected;
     private Animation animDisappear;
     private String currentTable;
     private long start;
-    private String trafficMode = "Best Guess";
-    private static int mapMode = GoogleMap.MAP_TYPE_NORMAL;
+    private String trafficMode;
+    private int mapMode = GoogleMap.MAP_TYPE_NORMAL;
+    private boolean isCentered = false;
+    private boolean isInfoWindowOpen = false;
+    private boolean isInfoWindowRedraw = false;
     private boolean isMenuActive = false;
     private boolean isHighwaysEnabled = true;
     private boolean isTollsEnabled = true;
     private boolean isFerriesEnabled = true;
     private boolean isTrafficEnabled = true;
     private boolean isDarkEnabled = false;
-    private static boolean infoWindowOpen = false;
+    private boolean isMonoEnabled = false;
     private boolean doubleBackToExitPressedOnce = false;
 
     @Override
@@ -191,22 +192,19 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_maps);
 
-        app = (BranchDirectoryMap) getApplication();
         mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map_fragment);
-        mapFragment.getMapAsync(this);
+        context = this;
 
         searchView = findViewById(R.id.searchView);
-        mapLayout = findViewById(R.id.layout_map);
         markerButtonsLayout = findViewById(R.id.layout_marker_buttons);
-//        markerButtonsLayout.setVisibility(View.GONE);
         dbHelper = new LocationDatabaseHelper(this);
-        dialogUtils = new DialogUtils(this);
-//        varMap = null;
+        dialogUtils = new DialogUtils();
+        sdf = new java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault());
 
-        sharedPreferences = getSharedPreferences(app.SHARED_PREFS, Context.MODE_PRIVATE);
+        sharedPreferences = getSharedPreferences(BranchDirectoryMap.SHARED_PREFS, Context.MODE_PRIVATE);
         editor = sharedPreferences.edit();
-        if (!sharedPreferences.contains(app.KEY_LOAD_FINISHED)) {
-            editor.putBoolean(app.KEY_LOAD_FINISHED, false).apply();
+        if (!sharedPreferences.contains(BranchDirectoryMap.KEY_LOAD_FINISHED)) {
+            editor.putBoolean(BranchDirectoryMap.KEY_LOAD_FINISHED, false).apply();
         }
 
         String[] trafficMetricsStr = BuildConfig.TRAFFIC_METRICS.split(",");
@@ -216,25 +214,28 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 //            Log.i(TAG, "trafficMetrics[" + i + "]: " + trafficMetrics[i]);
         }
 
+        Log.i(TAG, "MapsActivity created");
+
+        getLocationPermission();
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+        getCurrentLocation(this::centerOnUser);
         setupInterface();
         setupSearchView();
-        setAutoCompleteThreshold(searchView, 0);    // show suggestions immediately
+        setAutoCompleteThreshold(searchView);    // show suggestions immediately
         handleIntent(getIntent());
+        mapFragment.getMapAsync(this);
+    }
 
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
-        locationCallback = new LocationCallback() {
-            @Override
-            public void onLocationResult(LocationResult locationResult) {
-            if (locationResult == null) {
-                Log.i(TAG, "locationResult is null");
-                return;
-            }
-            for (Location location : locationResult.getLocations()) {
-                lastKnownLocation = location;
-                break;
-            }
-            }
-        };
+    private void getLocationPermission() {
+        if (ContextCompat.checkSelfPermission(this.getApplicationContext(),
+                android.Manifest.permission.ACCESS_FINE_LOCATION)
+                == PackageManager.PERMISSION_GRANTED) {
+            locationPermissionGranted = true;
+            Log.i(TAG, "location permission already granted");
+        } else {
+            Toast.makeText(this, "Location permission denied, this app will not work properly",
+                    Toast.LENGTH_SHORT).show();
+        }
     }
 
     @Override
@@ -297,9 +298,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             }
 
             @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-
-            }
+            public void onNothingSelected(AdapterView<?> parent) {}
         });
         searchSpinner.setVisibility(View.GONE);
 
@@ -312,7 +311,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             routeMenu.startAnimation(animLeftMenu);
             routeButton.setVisibility(View.GONE);
             clearMenus("R");
-            clearStuff();
+            clearMap();
         });
         routeButton.setVisibility(View.GONE);
 
@@ -321,18 +320,16 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
         Spinner trafficSpinner = findViewById(R.id.spinner_traffic);
         ArrayAdapter<CharSequence> trafficAdapter;
+        int arrayResId;
         if (BuildConfig.USE_ADVANCED_ROUTING) {
-            trafficAdapter = ArrayAdapter.createFromResource(
-                    this,
-                    R.array.traffic_adv_dropdown,
-                    R.layout.spinner_selected_item);
+            arrayResId = R.array.traffic_adv_dropdown;
         } else {
-            trafficMode = "Optimal Aware";
-            trafficAdapter = ArrayAdapter.createFromResource(
-                    this,
-                    R.array.traffic_dropdown,
-                    R.layout.spinner_selected_item);
+            arrayResId = R.array.traffic_dropdown;
         }
+        trafficAdapter = ArrayAdapter.createFromResource(
+                this,
+                arrayResId,
+                R.layout.spinner_selected_item);
         trafficAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         trafficSpinner.setAdapter(trafficAdapter);
         trafficSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -340,44 +337,37 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 trafficMode = parent.getItemAtPosition(position).toString();
                 Log.i(TAG, "trafficMode: " + trafficMode);
-                clearStuff();
+                clearMap();
             }
 
             @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-
-            }
+            public void onNothingSelected(AdapterView<?> parent) {}
         });
-        trafficSpinner.setSelection(Collections.binarySearch(Arrays.asList(getResources().getStringArray(R.array.traffic_dropdown)), trafficMode));
+        trafficMode = BranchDirectoryMap.DEFAULT_TRAFFIC_MODE[BuildConfig.USE_ADVANCED_ROUTING ? 1 : 0];
+        Log.i(TAG, "default trafficMode: " + trafficMode);
+        if (!trafficMode.isEmpty()) {
+            trafficSpinner.setSelection(trafficAdapter.getPosition(trafficMode));
+        }
 
         SwitchCompat switchHighways = findViewById(R.id.switch_highways);
         switchHighways.setChecked(isHighwaysEnabled);
-        switchHighways.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            @Override
-            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                isHighwaysEnabled = isChecked;
-                clearStuff();
-            }
+        switchHighways.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            isHighwaysEnabled = isChecked;
+            clearMap();
         });
 
         SwitchCompat switchTolls = findViewById(R.id.switch_tolls);
         switchTolls.setChecked(isTollsEnabled);
-        switchTolls.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            @Override
-            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                isTollsEnabled = isChecked;
-                clearStuff();
-            }
+        switchTolls.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            isTollsEnabled = isChecked;
+            clearMap();
         });
 
         SwitchCompat switchFerries = findViewById(R.id.switch_ferries);
         switchFerries.setChecked(isFerriesEnabled);
-        switchFerries.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            @Override
-            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                isFerriesEnabled = isChecked;
-                clearStuff();
-            }
+        switchFerries.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            isFerriesEnabled = isChecked;
+            clearMap();
         });
 
         Animation animRightMenu = AnimationUtils.loadAnimation(this, R.anim.menu_right_anim);
@@ -388,7 +378,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             layersMenu.startAnimation(animRightMenu);
             layersButton.setVisibility(View.GONE);
             clearMenus("L");
-            clearStuff();
+            clearMap();
         });
         layersButton.setVisibility(View.GONE);
 
@@ -408,105 +398,84 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 switch (position) {
                     case 0:
                         mapMode = GoogleMap.MAP_TYPE_NORMAL;
-                        switchDark.setEnabled(true);
-                        switchDark.setTextColor(Color.BLACK);
+                        switchToggler(switchDark, true);
+                        switchToggler(switchMono, true);
                         break;
                     case 1:
                         mapMode = GoogleMap.MAP_TYPE_TERRAIN;
-                        switchDark.setEnabled(false);
-                        switchDark.setTextColor(Color.GRAY);
+                        switchToggler(switchDark, false);
+                        switchToggler(switchMono, false);
                         break;
                     case 2:
                         mapMode = GoogleMap.MAP_TYPE_SATELLITE;
-                        switchDark.setEnabled(false);
-                        switchDark.setTextColor(Color.GRAY);
+                        switchToggler(switchDark, false);
+                        switchToggler(switchMono, false);
                         break;
                     case 3:
                         mapMode = GoogleMap.MAP_TYPE_HYBRID;
-                        switchDark.setEnabled(false);
-                        switchDark.setTextColor(Color.GRAY);
+                        switchToggler(switchDark, false);
+                        switchToggler(switchMono, false);
+                        break;
+                    default:
+                        Log.i(TAG, "unknown map mode in appearanceSpinner");
+                        break;
                 }
                 mMap.setMapType(mapMode);
-                clearStuff();
+                clearMap();
             }
 
             @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-                // Handle the case where nothing is selected
-            }
+            public void onNothingSelected(AdapterView<?> parent) {}
         });
-        appearanceSpinner.setSelection(0);
 
         SwitchCompat switchTraffic = findViewById(R.id.switch_traffic);
         switchTraffic.setChecked(isTrafficEnabled);
-        switchTraffic.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            @Override
-            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                isTrafficEnabled = isChecked;
-                mMap.setTrafficEnabled(isChecked);
-                clearStuff();
-            }
+        switchTraffic.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            isTrafficEnabled = isChecked;
+            mMap.setTrafficEnabled(isChecked);
+            clearMap();
         });
 
         switchDark = findViewById(R.id.switch_dark);
         switchDark.setChecked(isDarkEnabled);
-        switchDark.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            @Override
-            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                isDarkEnabled = isChecked;
-                if (isDarkEnabled) {
-                    setNightMode();
-                } else {
-                    mMap.setMapStyle(null);
-                }
-                clearStuff();
-            }
+        switchDark.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            isDarkEnabled = isChecked;
+            setMapStyle();
+        });
+
+        switchMono = findViewById(R.id.switch_mono);
+        switchMono.setChecked(isMonoEnabled);
+        switchMono.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            isMonoEnabled = isChecked;
+            setMapStyle();
         });
 
         clearRouteButton = findViewById(R.id.button_clear);
-        clearRouteButton.setOnClickListener(v -> {
-            clearRoute();
-        });
+        clearRouteButton.setOnClickListener(v -> clearRoute());
 
         viewMarkerButton = findViewById(R.id.button_marker_view);
-        viewMarkerButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                String address = currentItem.getRefined().contains("+") ? currentItem.getRefined() : currentItem.getSnippet() + ", " + currentItem.getRefined();
-                Uri gmmIntentUri = Uri.parse("geo:0,0?q=" + Uri.encode(address));
-                Intent intent = new Intent(Intent.ACTION_VIEW, gmmIntentUri);
-                intent.setPackage("com.google.android.apps.maps");
-                if (intent.resolveActivity(getPackageManager()) != null) {
-                    startActivity(intent);
-                }
+        viewMarkerButton.setOnClickListener(view -> {
+            String address = currentItem.getRefined().contains("+") ? currentItem.getRefined() : currentItem.getSnippet() + ", " + currentItem.getRefined();
+            Uri gmmIntentUri = Uri.parse("geo:0,0?q=" + Uri.encode(address));
+            Intent intent = new Intent(Intent.ACTION_VIEW, gmmIntentUri);
+            intent.setPackage("com.google.android.apps.maps");
+            if (intent.resolveActivity(getPackageManager()) != null) {
+                startActivity(intent);
             }
         });
 
         addMarkerButton = findViewById(R.id.button_marker_add);
-        addMarkerButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                addMarkerToRoute();
-            }
-        });
+        addMarkerButton.setOnClickListener(view -> addMarkerToRoute());
 
         removeMarkerButton = findViewById(R.id.button_marker_remove);
-        removeMarkerButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                removeMarkerFromRoute();
-            }
-        });
+        removeMarkerButton.setOnClickListener(view -> removeMarkerFromRoute());
         removeMarkerButton.setVisibility(View.GONE);
 
         callMarkerButton = findViewById(R.id.button_marker_call);
-        callMarkerButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Intent intent = new Intent(Intent.ACTION_DIAL);
-                intent.setData(Uri.parse("tel:" + currentItem.getPhone()));
-                startActivity(intent);
-            }
+        callMarkerButton.setOnClickListener(view -> {
+            Intent intent = new Intent(Intent.ACTION_DIAL);
+            intent.setData(Uri.parse("tel:" + currentItem.getPhone()));
+            startActivity(intent);
         });
     }
 
@@ -521,12 +490,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 R.layout.suggestion_item, null, from, to, 0);
         searchView.setSuggestionsAdapter(suggestionAdapter);
 
-        searchView.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                searchView.setIconified(false);
-            }
-        });
+        searchView.setOnClickListener(v -> searchView.setIconified(false));
 
         searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
             @Override
@@ -563,7 +527,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         searchView.setOnQueryTextFocusChangeListener((v, hasFocus) -> {
             if (hasFocus) {
                 clearMenus("");
-                clearStuff();
+                clearMap();
                 Log.i(TAG, "triggered setOnQueryTextFocusChangeListener");
                 updateSuggestions("");
                 searchView.setQuery(searchView.getQuery().toString(), false);
@@ -572,12 +536,12 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         searchView.setVisibility(View.GONE);
     }
 
-    private void setAutoCompleteThreshold(SearchView searchView, int threshold) {
+    private void setAutoCompleteThreshold(SearchView searchView) {
         try {
             Field searchAutoCompleteField = SearchView.class.getDeclaredField("mSearchSrcTextView");
             searchAutoCompleteField.setAccessible(true);
             AutoCompleteTextView searchAutoComplete = (AutoCompleteTextView) searchAutoCompleteField.get(searchView);
-            searchAutoComplete.setThreshold(threshold);
+            searchAutoComplete.setThreshold(0);
         } catch (NoSuchFieldException | IllegalAccessException e) {
             e.printStackTrace();    // FIX THIS: add logging
         }
@@ -586,24 +550,24 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
-        mMap.setOnMapClickListener(new GoogleMap.OnMapClickListener() {
-            @Override
-            public void onMapClick(LatLng latLng) {
-                if (routeMenu.getVisibility() == View.VISIBLE || layersMenu.getVisibility() == View.VISIBLE) {
-                    clearMenus("");
-                }
-                if (infoWindowOpen) {
-                    clearStuff();
-                }
-                searchView.setQuery("", false);
-                searchView.clearFocus();
+        updateLocationUI();
+        if (lastKnownLocation != null) {
+            centerOnUser();
+        }
+        mMap.setOnMapClickListener(latLng -> {
+            if (routeMenu.getVisibility() == View.VISIBLE || layersMenu.getVisibility() == View.VISIBLE) {
+                clearMenus("");
             }
+            if (isInfoWindowOpen) {
+                clearInfoWindow();
+            }
+            searchView.setQuery("", false);
+            searchView.clearFocus();
         });
 
-        clusterManager = new ClusterManager<MyItem>(this, mMap);
+        clusterManager = new ClusterManager<>(this, mMap);
         customRenderer = new CustomClusterRenderer(this, mMap, clusterManager);
         clusterManager.setRenderer(customRenderer);
-        mWindow = getLayoutInflater().inflate(R.layout.info_window, null);
 
         mMap.setOnCameraIdleListener(clusterManager);
         mMap.setOnMarkerClickListener(clusterManager);
@@ -614,88 +578,61 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 Point screenPosition = projection.toScreenLocation(currentMarker.getPosition());
                 moveButtonsWithMarker(screenPosition);
             }
+            isCentered = false;
         });
 
-        clusterManager.getMarkerCollection().setInfoWindowAdapter(new GoogleMap.InfoWindowAdapter() {
-            @Nullable
-            @Override
-            public View getInfoContents(@NonNull Marker marker) {
-                Log.i(TAG, "triggered getinfocontents");
-                return null;
-            }
-
-            @Override
-            public View getInfoWindow(Marker marker) {
-                Log.i(TAG, "triggered getinfowindow");
-
-                TextView titleTextView = mWindow.findViewById(R.id.title);
-                titleTextView.setText(marker.getTitle());
-
-                TextView snippetTextView = mWindow.findViewById(R.id.snippet);
-                snippetTextView.setText(marker.getSnippet());
-
-                TextView infoTextView = mWindow.findViewById(R.id.information);
-                infoTextView.setText(infoText);
-
-                TextView trafficTextView = mWindow.findViewById(R.id.traffic);
-                trafficTextView.setText(trafficText);
-
-                Button directionsButton = mWindow.findViewById(R.id.directionsButton);
-
-                infoWindowOpen = true;
-
-                return mWindow;
-            }
-        });
-        clusterManager.getMarkerCollection().setOnInfoWindowClickListener(new GoogleMap.OnInfoWindowClickListener() {
-            @Override
-            public void onInfoWindowClick(@NonNull Marker marker) {
-                Log.i(TAG, "triggered onInfoWindowClick");
-
+        customAdapter = new CustomInfoWindowAdapter(context);
+        clusterManager.getMarkerCollection().setInfoWindowAdapter(customAdapter);
+        customAdapter.setInterface(locationPermissionGranted, BuildConfig.USE_ADVANCED_ROUTING);
+        customAdapter.setInfoWindowOpenListener(this);
+        clusterManager.getMarkerCollection().setOnInfoWindowClickListener(marker -> {
+            Log.i(TAG, "triggered onInfoWindowClick");
+            if (locationPermissionGranted) {
                 LatLng markerPosition = marker.getPosition();
-                String url = app.DIR_URL + markerPosition.latitude + "," + markerPosition.longitude;
+                String url = BranchDirectoryMap.DIR_URL + markerPosition.latitude + "," + markerPosition.longitude;
 
                 if (!routeMarkers.isEmpty()) {
-                    StringBuilder waypointsBuilder = new StringBuilder();
-                    Iterator<String> keyIterator = routeMarkers.keySet().iterator();
-                    while (keyIterator.hasNext()) {
-                        String title = keyIterator.next();
-                        if (waypointsBuilder.length() > 0) {
-                            waypointsBuilder.append("|");
-                        }
-                        Marker thisMarker = (Marker) routeMarkers.get(title).get(0);
-                        if (!keyIterator.hasNext() && thisMarker.equals(currentMarker)) {
-                            Log.i(TAG, "last routeMarker is currentMarker");
-                            break;
-                        }
-                        LatLng waypointPosition = thisMarker.getPosition();
-                        waypointsBuilder.append(waypointPosition.latitude).append(",")
-                                .append(waypointPosition.longitude);
+                    StringBuilder params = parameterCombiner(false);
+                    if (params.length() > 0) {
+                        url += params;
                     }
-                    if (waypointsBuilder.length() > 0) {
-                        url += "&waypoints=" + waypointsBuilder;
-                    }
-                }
-
-                StringBuilder avoidOptions = new StringBuilder();
-                if (!isTollsEnabled) avoidOptions.append("tolls|");
-                if (!isHighwaysEnabled) avoidOptions.append("highways|");
-                if (!isFerriesEnabled) avoidOptions.append("ferries|");
-                if (avoidOptions.length() > 0) {
-                    avoidOptions.setLength(avoidOptions.length() - 1);
-                    url += "&avoid=" + avoidOptions;
                 }
 
                 Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
                 intent.setPackage("com.google.android.apps.maps");
-
                 if (intent.resolveActivity(getPackageManager()) != null) {
                     startActivity(intent);
                 }
             }
         });
+        clusterManager.setOnClusterClickListener(cluster -> {
+            if (cluster == lastCluster && isCentered) {
+                customRenderer.setShouldCluster(false);
+                clusterManager.cluster();
+            }
+            mMap.animateCamera(CameraUpdateFactory.newLatLng(cluster.getPosition()), new GoogleMap.CancelableCallback() {
+                @Override
+                public void onFinish() {
+                    isCentered = true;
+                    lastCluster = cluster;
+                }
 
-        getLocationPermission();
+                @Override
+                public void onCancel() {}
+            });
+            return true;
+        });
+        clusterManager.setOnClusterItemClickListener(clusterItem -> {
+            currentMarker = clusterItemMarkerMap.get(currentTable).get(clusterItem);
+            if (currentMarker != null) {
+                startMarker();
+                Log.i(TAG, "triggered setOnClusterItemClickListener");
+                Log.i(TAG, "marker: " + currentMarker.getTitle());
+            } else {
+                Log.i(TAG, "marker is null at setOnClusterItemClickListener");
+            }
+            return true;
+        });
 
         loadTextView = findViewById(R.id.textview_load);
         loadTextView.setVisibility(View.VISIBLE);
@@ -707,111 +644,34 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 //        Log.i(TAG, "varMap from places: " + varMap);
 
         task = new MapLoaderTask(this);
-        if (!sharedPreferences.getBoolean(app.KEY_APIKEY_LOADED, false)) {
+        if (!sharedPreferences.getBoolean(BranchDirectoryMap.KEY_APIKEY_LOADED, false)) {
             Log.i(TAG, "fetchGeocodeApiKey started");
-            Secrets.fetchGeocodeApiKey(this, new Secrets.OnApiKeyReceivedListener() {
-                @Override
-                public void onApiKeyReceived(boolean keyReceived) {
-                    if (keyReceived) {
-                        Log.i(TAG, "fetchGeocodeApiKey successful");
-                        editor.putBoolean(app.KEY_APIKEY_LOADED, true).apply();
-                        task.execute();
-                    } else {
-                        Log.i(TAG, "fetchGeocodeApiKey failed/timed out");
-                        dialogUtils.showOkDialog("Warning", getString(R.string.key_error),
-                                new DialogInterface.OnClickListener() {
-                                    @Override
-                                    public void onClick(DialogInterface dialog, int id) {
-                                        dialog.dismiss();
-                                    }
-                                });
-                    }
+            Secrets.fetchGeocodeApiKey(this, keyReceived -> {
+                if (keyReceived) {
+                    Log.i(TAG, "fetchGeocodeApiKey successful");
+                    editor.putBoolean(BranchDirectoryMap.KEY_APIKEY_LOADED, true).apply();
+                    task.execute();
+                } else {
+                    Log.e(TAG, "fetchGeocodeApiKey failed/timed out");
+                    dialogUtils.showOkDialog(context, getString(R.string.warning), getString(R.string.key_error),
+                            (dialog, id) -> dialog.dismiss());
                 }
             });
         } else {
             task.execute();
         }
 
-        clusterManager.setOnClusterItemClickListener(clusterItem -> {
-            currentMarker = clusterItemMarkerMap.get(currentTable).get(clusterItem);
-            if (currentMarker != null) {
-                Log.i(TAG, "triggered setOnClusterItemClickListener");
-                Log.i(TAG, "marker: " + currentMarker.getTitle());
-                startMarker();
-            } else {
-                Log.i(TAG, "marker is null at setOnClusterItemClickListener");
-            }
-            return true;
-        });
-
-        updateLocationUI();
+        if (BuildConfig.MAP_ID.isEmpty()) {
+            createMapStyles();
+        } else {
+            Log.i(TAG, "map id: " + BuildConfig.MAP_ID);
+            switchToggler(switchDark, false);
+            switchToggler(switchMono, false);
+        }
         mMap.setTrafficEnabled(isTrafficEnabled);
         mMap.setMapType(mapMode);
-        Log.i(TAG, "reached end of mapready");
-    }
-
-    private void getLocationPermission() {
-        if (ContextCompat.checkSelfPermission(this.getApplicationContext(),
-                android.Manifest.permission.ACCESS_FINE_LOCATION)
-                == PackageManager.PERMISSION_GRANTED) {
-            locationPermissionGranted = true;
-        } else {
-            ActivityCompat.requestPermissions(this,
-                    new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION},
-                    REQUEST_CODE);
-        }
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-//        locationPermissionGranted = false;
-        if (requestCode == REQUEST_CODE) {
-            if (grantResults.length > 0
-                    && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                locationPermissionGranted = true;
-            }
-        } else {
-            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        }
-    }
-
-    private void updateLocationUI() {
-        if (mMap == null) {
-            return;
-        }
-        try {
-            if (locationPermissionGranted) {
-                mMap.setMyLocationEnabled(true);
-                getCurrentLocation(this::centerOnUser);
-            } else {
-                mMap.setMyLocationEnabled(false);
-                mMap.getUiSettings().setMyLocationButtonEnabled(false);
-                lastKnownLocation = null;
-//                getLocationPermission();
-            }
-        } catch (SecurityException e) {
-            Log.i(TAG, e.getMessage());
-        }
-    }
-
-    private void moveButtonsWithMarker(Point screenPosition) {
-        int x = screenPosition.x - markerButtonsLayout.getWidth() / 2;
-        int y = screenPosition.y + 20;
-
-        markerButtonsLayout.setX(x);
-        markerButtonsLayout.setY(y);
-
-        markerButtonsLayout.setVisibility(View.VISIBLE);
-    }
-
-    private void setNightMode() {
-        try {
-            InputStream inputStream = getAssets().open("dark_style.json");
-            String style = new Scanner(inputStream).useDelimiter("\\A").next();
-            mMap.setMapStyle(new MapStyleOptions(style));
-        } catch (IOException e) {
-            Log.i(TAG, "Error loading night mode style");
-        }
+        Log.i(TAG, "reached end of onMapReady");
+        clusterManager.cluster();
     }
 
     private void performSearch(String query) {
@@ -819,12 +679,11 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         if (query.contains("+")) {      // chosen from suggestions list
             query = query.split("\\+", 2)[1].toLowerCase();
             Log.i(TAG, "query 1: " + query);
-            breakPoint1:
             for (MyItem suggestion : markers.get(currentTable)) {
                 if (suggestion.getSnippet().toLowerCase().equals(query)) {
                     correctSuggestion = suggestion;
                     Log.i(TAG, "case 1: " + suggestion.getSnippet());
-                    break breakPoint1;
+                    break;
                 }
             }
         } else {    // chosen based on query
@@ -854,15 +713,14 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             } else {
                 Log.i(TAG, "marker is null at performSearch");
             }
-
         } else {
-            Log.i(TAG, "---Unknown result: not programmed---");
+            Log.e(TAG, "---Unknown result: not programmed---");
         }
     }
 
     private void updateSuggestions(String query) {
         filteredSuggestions.clear();
-        for (int i = 0; i < app.SEARCH_LEVELS; i++) {
+        for (int i = 0; i < BranchDirectoryMap.SEARCH_LEVELS; i++) {
             filteredSuggestions.add(new ArrayList<>());
         }
         if (!query.isEmpty()) {
@@ -921,7 +779,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     if (suggestion.getName().toLowerCase().contains(query)) {
 //                        Log.i(TAG, "updatesuggestion case 4 name: " + suggestion.getName());
                         filteredSuggestions.get(2).add(suggestion);
-                    // matches branch address
+                        // matches branch address
                     } else if (suggestion.getSnippet().toLowerCase().contains(query)) {
 //                        Log.i(TAG, "updatesuggestion case 5 snippet: " + suggestion.getSnippet());
                         filteredSuggestions.get(3).add(suggestion);
@@ -940,7 +798,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
 //        Log.i(TAG, "suggestion size: " + filteredSuggestions.size());
         final MatrixCursor cursor = new MatrixCursor(new String[]{BaseColumns._ID, "location", "address"});
-        for (int i = 0; i < app.SEARCH_LEVELS; i++) {
+        for (int i = 0; i < BranchDirectoryMap.SEARCH_LEVELS; i++) {
             for (int j = 0; j < filteredSuggestions.get(i).size(); j++) {
                 MyItem suggestion = filteredSuggestions.get(i).get(j);
                 cursor.addRow(new Object[]{j, suggestion.getTitle(), suggestion.getSnippet()});
@@ -948,6 +806,116 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
 //        Log.i(TAG, "cursor size: " + cursor.getCount());
         suggestionAdapter.changeCursor(cursor);
+    }
+
+    private void updateLocationUI() {
+        try {
+            if (locationPermissionGranted) {
+                mMap.setMyLocationEnabled(true);
+            } else {
+                mMap.setMyLocationEnabled(false);
+                mMap.getUiSettings().setMyLocationButtonEnabled(false);
+                lastKnownLocation = null;
+            }
+        } catch (SecurityException e) {
+            Log.i(TAG, e.getMessage());
+        }
+    }
+
+    private void moveButtonsWithMarker(Point screenPosition) {
+        int x = screenPosition.x - markerButtonsLayout.getWidth() / 2;
+        int y = screenPosition.y + 20;
+
+        markerButtonsLayout.setX(x);
+        markerButtonsLayout.setY(y);
+
+        markerButtonsLayout.setVisibility(View.VISIBLE);
+    }
+
+    private void setMapStyle() {
+        int styleKey = (isDarkEnabled ? 1 : 0) + (isMonoEnabled ? 2 : 0);
+        Log.i(TAG, "setMapStyle: " + styleKey);
+        switch (styleKey) {
+            case 0:
+                mMap.setMapStyle(styles.get(stylesList.get(0)));
+                break;
+            case 1:
+                mMap.setMapStyle(styles.get(stylesList.get(1)));
+                break;
+            case 2:
+                mMap.setMapStyle(styles.get(stylesList.get(2)));
+                break;
+            case 3:
+                mMap.setMapStyle(styles.get(stylesList.get(3)));
+                break;
+            default:
+                Log.e(TAG, "invalid styleKey in setMapStyle");
+                break;
+        }
+        clearMap();
+    }
+
+    private void createMapStyles() {
+        Log.i(TAG, "createMapStyles");
+        String[] stylesStr = BuildConfig.STYLE_JSON.split(",");
+        stylesList = new ArrayList<>();
+        styles = new HashMap<>();
+        for (String style : stylesStr) {
+            try {
+                String styleStr = style.replace(".json", "");
+                int resId = getResources().getIdentifier(styleStr, "raw", getPackageName());
+                InputStream styleStream = getResources().openRawResource(resId);
+                String styleJson = new Scanner(styleStream).useDelimiter("\\A").next();
+                stylesList.add(styleStr);
+                styles.put(styleStr, new MapStyleOptions(styleJson));
+            } catch (Resources.NotFoundException e) {
+                Log.e(TAG, "Can't find style: ", e);
+            }
+        }
+//        Log.i(TAG, "styles: " + styles.toString());
+    }
+
+    private void switchToggler(SwitchCompat switchButton, boolean enabled) {
+        if (enabled){
+            switchButton.setEnabled(true);
+            switchButton.setTextColor(Color.BLACK);
+        } else {
+            switchButton.setEnabled(false);
+            switchButton.setTextColor(Color.GRAY);
+        }
+    }
+
+    private StringBuilder parameterCombiner(boolean avoidance) {
+        StringBuilder waypointsBuilder = new StringBuilder();
+        Iterator<String> keyIterator = routeMarkers.keySet().iterator();
+        while (keyIterator.hasNext()) {
+            String title = keyIterator.next();
+            if (waypointsBuilder.length() > 0) {
+                waypointsBuilder.append("|");
+            }
+            Marker thisMarker = (Marker) routeMarkers.get(title).get(0);
+            if (!keyIterator.hasNext() && thisMarker.equals(currentMarker)) {
+                Log.i(TAG, "last routeMarker is currentMarker");
+                break;
+            }
+            LatLng waypointPosition = thisMarker.getPosition();
+            waypointsBuilder.append(waypointPosition.latitude).append(",")
+                    .append(waypointPosition.longitude);
+        }
+        if (waypointsBuilder.length() > 0) {
+            waypointsBuilder.insert(0, "&waypoints=");
+        }
+        StringBuilder avoidOptions = new StringBuilder();
+        if (avoidance) {
+            if (!isTollsEnabled) avoidOptions.append("tolls|");
+            if (!isHighwaysEnabled) avoidOptions.append("highways|");
+            if (!isFerriesEnabled) avoidOptions.append("ferries|");
+            if (avoidOptions.length() > 0) {
+                avoidOptions.insert(0, "&avoid=");
+                avoidOptions.setLength(avoidOptions.length() - 1);
+            }
+        }
+        return waypointsBuilder.append(avoidOptions);
     }
 
     private void getCurrentLocation(LocationUpdateAction callback) {
@@ -976,21 +944,27 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     }
 
     public void centerOnUser() {
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(lastKnownLocation.getLatitude(),
-                lastKnownLocation.getLongitude()), 15f));
+        if (!isCentered) {
+            mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(lastKnownLocation.getLatitude(),
+                    lastKnownLocation.getLongitude()), 15f));
+            isCentered = true;
+        }
     }
 
     private void startMarker() {
+        Log.i(TAG, "startMarker");
         if (currentMarker == null) {
             Log.i(TAG, "marker is null at startMarker");
             return;
         }
         currentItem = getKeyByValue(clusterItemMarkerMap.get(currentTable), currentMarker);
         clearMenus("");
-        infoText = "Loading...";
-        trafficText = new SpannableString("Loading...");
-        currentMarker.showInfoWindow();
-        if (!currentItem.getPhone().isEmpty()) {
+        customAdapter.setInfoText("Loading...");
+        if (BuildConfig.USE_ADVANCED_ROUTING) {
+            customAdapter.setTrafficText(new SpannableString("Loading..."));
+        }
+        redrawInfoWindow();
+        if ((Boolean) varMap.get(currentTable).get("use_phone") && !currentItem.getPhone().isEmpty()) {
             callMarkerButton.setVisibility(View.VISIBLE);
         } else {
             callMarkerButton.setVisibility(View.GONE);
@@ -1003,13 +977,19 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             addMarkerButton.setVisibility(View.VISIBLE);
             removeMarkerButton.setVisibility(View.GONE);
         }
-        getCurrentLocation(this::GetInformationTaskCreator);
+        if (locationPermissionGranted) {
+            getCurrentLocation(this::GetInformationTaskCreator);
+        } else {
+            addMarkerButton.setVisibility(View.GONE);
+//            Toast.makeText(this, "Location permission denied, this app will not work properly", Toast.LENGTH_SHORT).show();
+        }
         mMap.animateCamera(CameraUpdateFactory.newLatLng(currentMarker.getPosition()), new GoogleMap.CancelableCallback() {
             @Override
             public void onFinish() {
                 Log.i(TAG, "animateCamera onFinish");
                 Projection projection = mMap.getProjection();
                 if (currentMarker == null) {
+                    Log.i(TAG, "currentMarker is null at animateCamera onFinish");
                     currentMarker = tempMarker;
                 }
                 Point screenPosition = projection.toScreenLocation(currentMarker.getPosition());
@@ -1025,6 +1005,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     }
 
     public void addMarkerToRoute() {
+        Log.i(TAG, "addMarkerToRoute");
         if (routeMarkers.size() < BuildConfig.INTERMEDIATE_STEPS) {
             routeMarkers.put(currentMarker.getTitle(), new ArrayList<>());
             routeMarkers.get(currentMarker.getTitle()).add(currentMarker);
@@ -1043,6 +1024,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     }
 
     public void removeMarkerFromRoute() {
+        Log.i(TAG, "removeMarkerFromRoute");
         routeMarkers.remove(currentMarker.getTitle());
         currentItem.setSelected(-1);
         lastSelected = false;
@@ -1053,23 +1035,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             customRenderer.setShouldCluster(true);
         } else {
             getCurrentLocation(this::GetInformationTaskCreator);
-            currentMarker.showInfoWindow();
+            redrawInfoWindow();
         }
         clusterManager.cluster();
-    }
-
-    public void clearRoute() {
-        for (String key : routeMarkers.keySet()) {
-            MyItem item = (MyItem) routeMarkers.get(key).get(1);
-            item.setSelected(-1);
-        }
-        routeMarkers.clear();
-        clearRouteButton.setVisibility(View.GONE);
-        addMarkerButton.setVisibility(View.VISIBLE);
-        removeMarkerButton.setVisibility(View.GONE);
-        customRenderer.setShouldCluster(true);
-        clusterManager.cluster();
-        startMarker();
     }
 
     // requires unique values
@@ -1087,25 +1055,21 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     @Override
     public void onBackPressed() {
 //        Log.i(TAG, "ONBACKPRESSED");
-        if (infoWindowOpen) {
-            clearStuff();
-            getInformationTask.cancel(true);
+        if (isInfoWindowOpen) {
+//            Log.i(TAG, "isInfoWindowOpen is true");
+            clearInfoWindow();
+//            Log.i(TAG, "isInfoWindowOpen is: " + isInfoWindowOpen);
         } else if (routeMenu.getVisibility() == View.VISIBLE || layersMenu.getVisibility() == View.VISIBLE) {
             clearMenus("");
         } else {
             if (doubleBackToExitPressedOnce) {
                 super.onBackPressed();
                 task.cancel(true);
-                finish();
+                finishAffinity();
             }
             doubleBackToExitPressedOnce = true;
             Toast.makeText(this, "Please press back again to exit", Toast.LENGTH_SHORT).show();
-            new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    doubleBackToExitPressedOnce = false;
-                }
-            }, 2000);
+            new Handler(Looper.getMainLooper()).postDelayed(() -> doubleBackToExitPressedOnce = false, 2000);
         }
     }
 
@@ -1113,40 +1077,68 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         Log.i(TAG, "clearMenus side: " + side);
         switch (side) {
             case "L":
-                if (routeMenu.getVisibility() == View.VISIBLE) {
-                    routeMenu.startAnimation(animDisappear);
-                    routeMenu.setVisibility(View.GONE);
-                    routeButton.setVisibility(View.VISIBLE);
-                }
+                hideMenu(routeMenu, routeButton);
                 break;
             case "R":
-                if (layersMenu.getVisibility() == View.VISIBLE) {
-                    layersMenu.startAnimation(animDisappear);
-                    layersMenu.setVisibility(View.GONE);
-                    layersButton.setVisibility(View.VISIBLE);
-                }
+                hideMenu(layersMenu, layersButton);
                 break;
             default:
-                if (routeMenu.getVisibility() == View.VISIBLE) {
-                    routeMenu.startAnimation(animDisappear);
-                    routeMenu.setVisibility(View.GONE);
-                    routeButton.setVisibility(View.VISIBLE);
-                }
-                if (layersMenu.getVisibility() == View.VISIBLE) {
-                    layersMenu.startAnimation(animDisappear);
-                    layersMenu.setVisibility(View.GONE);
-                    layersButton.setVisibility(View.VISIBLE);
-                }
+                hideMenu(routeMenu, routeButton);
+                hideMenu(layersMenu, layersButton);
+                break;
         }
     }
 
-    private void clearStuff() {
-        Log.i(TAG, "clearStuff");
+    private void hideMenu(View menu, View button) {
+        if (menu.getVisibility() == View.VISIBLE) {
+            menu.startAnimation(animDisappear);
+            menu.setVisibility(View.GONE);
+            button.setVisibility(View.VISIBLE);
+        }
+    }
+
+    private void clearMap() {
+        Log.i(TAG, "clearMap");
         clearPolys();
-        for (Marker item : clusterManager.getMarkerCollection().getMarkers()) {
-            item.hideInfoWindow();
+//        for (Marker marker : clusterManager.getMarkerCollection().getMarkers()) {
+//            marker.hideInfoWindow();
+//        }
+        if (currentMarker != null) {
+            currentMarker.hideInfoWindow();
+            currentMarker = null;
         }
         markerButtonsLayout.setVisibility(View.GONE);
+    }
+
+    public void clearInfoWindow() {
+        Log.i(TAG, "clearInfoWindow");
+        clearMap();
+        if (getInformationTask != null) {
+            getInformationTask.cancel(true);
+        }
+    }
+
+    public void redrawInfoWindow() {
+        Log.i(TAG, "redrawInfoWindow");
+        isInfoWindowRedraw = true;
+        currentMarker.hideInfoWindow();
+        currentMarker.showInfoWindow();
+    }
+
+    public void clearRoute() {
+        Log.i(TAG, "clearRoute");
+        clearMap();
+        for (String title : routeMarkers.keySet()) {
+            MyItem item = (MyItem) routeMarkers.get(title).get(1);
+            item.setSelected(-1);
+        }
+        routeMarkers.clear();
+        clearRouteButton.setVisibility(View.GONE);
+        addMarkerButton.setVisibility(View.VISIBLE);
+        removeMarkerButton.setVisibility(View.GONE);
+        customRenderer.setShouldCluster(true);
+        clusterManager.cluster();
+        startMarker();
     }
 
     private void clearPolys() {
@@ -1169,21 +1161,32 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     }
 
     @Override
+    public void onInfoWindowOpened() {
+        Log.i(TAG, "onInfoWindowOpened");
+        isInfoWindowOpen = true;
+    }
+
+    @Override
     public void onInfoWindowClose(@NonNull Marker marker) {
         Log.i(TAG, "onInfoWindowClose");
-        getInformationTask.cancel(true);
-        clearPolys();
-        markerButtonsLayout.setVisibility(View.GONE);
-        infoWindowOpen = false;
-        tempMarker = currentMarker;
-        currentMarker = null;
-        lastSelected = currentItem.getSelected() > -1;
-        if (searchView.getQuery().length() != 0) {
-            searchView.setQuery("", false);
-            searchView.clearFocus();
+        if (!isInfoWindowRedraw) {
+            Log.i(TAG, "isInfoWindowRedraw is false");
+            if (getInformationTask != null) {
+                getInformationTask.cancel(true);
+            }
+            clearPolys();
+            markerButtonsLayout.setVisibility(View.GONE);
+            lastSelected = currentItem.getSelected() > -1;
+            if (searchView.getQuery().length() != 0) {
+                searchView.setQuery("", false);
+                searchView.clearFocus();
+            }
+            tempMarker = currentMarker;
+            currentMarker = null;
+            isInfoWindowOpen = false;
+            customRenderer.setShouldCluster(true);
         }
-        customRenderer.setShouldCluster(true);
-//        clusterManager.cluster();
+        isInfoWindowRedraw = false;
     }
 
     private int getMapSize(Map<String, List<MyItem>> map) {
@@ -1242,7 +1245,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     public void addToMap(Map<String, Map<String, Object>> outer, Map<String, List<MyItem>> inner) {
         for (String table : inner.keySet()) {
-            if (outer.keySet().contains(table)) {
+            if (outer.containsKey(table)) {
 //                Log.i(TAG, "outer table: " + outer.get(table));
 //                Log.i(TAG, "inner table: " + inner.get(table));
                 ArrayList<String> outerList = (ArrayList<String>) outer.get(table).get("array");
@@ -1252,7 +1255,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     int matchIndex = outerList.indexOf(item.getTitle());
                     if (matchIndex > -1) {
 //                        Log.i(TAG, "match index: " + matchIndex + " item: " + item.getTitle());
-                        outerList.subList(matchIndex, matchIndex + app.NUM_OF_MYITEM_VARS).clear();
+                        outerList.subList(matchIndex, matchIndex + BranchDirectoryMap.NUM_OF_MYITEM_VARS).clear();
                         outerList.addAll(matchIndex, newItem);
                     } else {
                         outerList.addAll(newItem);
@@ -1260,7 +1263,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 }
 //                Log.i(TAG, "new outer array: " + outer.get(table).get("array"));
             } else {
-                Log.i(TAG, "WARNING: addToMap - outer table not found");
+                Log.e(TAG, "WARNING: addToMap - outer table not found");
             }
         }
     }
@@ -1272,11 +1275,11 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
         Log.i(TAG, "onSaveInstanceState");
 
-        outState.putSerializable("markers", (Serializable) markers);
-        outState.putString("currentTable", currentTable);
+//        outState.putSerializable("markers", (Serializable) markers);
+//        outState.putString("currentTable", currentTable);
 
         clearMenus("");
-        clearStuff();
+        clearMap();
     }
 
     // does not work, FIX THIS
@@ -1286,10 +1289,10 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
         Log.i(TAG, "onRestoreInstanceState");
 
-        if (savedInstanceState != null) {
-            markers = (Map<String, List<MyItem>>) savedInstanceState.getSerializable("markers");
-            currentTable = savedInstanceState.getString("currentTable");
-        }
+//        if (savedInstanceState != null) {
+//            markers = (Map<String, List<MyItem>>) savedInstanceState.getSerializable("markers");
+//            currentTable = savedInstanceState.getString("currentTable");
+//        }
     }
 
     private class CustomClusterRenderer extends DefaultClusterRenderer<MyItem> {
@@ -1338,14 +1341,14 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private class MapLoaderTask extends AsyncTask<ArrayList<String>, Void, Void> {
 
         private final MapsActivity activity;
-        private boolean databaseExists;
+        private final boolean databaseExists;
         private Map<String, List<ContentValues>> values;
         private CountDownLatch latch;
         private int latchCount = 0;
         private Map<String, Map<String, List<String>>> geocoderMaps = new HashMap<>();
         private Map<String, Map<String, List<String>>> missingMaps = new HashMap<>();
-        private Gson gson = new Gson();
-        private LatLngTracker tracker = new LatLngTracker();
+        private final Gson gson = new Gson();
+        private final LatLngTracker tracker = new LatLngTracker();
 
         public MapLoaderTask(MapsActivity activity) {
             this.activity = activity;
@@ -1360,16 +1363,16 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             db = dbHelper.getWritableDatabase();
             values = new HashMap<>();
 
-            if (sharedPreferences.contains(app.KEY_LOAD_FINISHED)) {
-                Log.i(TAG, "KEY_LOAD_FINISHED: " + sharedPreferences.getBoolean(app.KEY_LOAD_FINISHED, false));
+            if (sharedPreferences.contains(BranchDirectoryMap.KEY_LOAD_FINISHED)) {
+                Log.i(TAG, "KEY_LOAD_FINISHED: " + sharedPreferences.getBoolean(BranchDirectoryMap.KEY_LOAD_FINISHED, false));
             }
-//            if (!sharedPreferences.getBoolean(app.KEY_LOAD_FINISHED, false)) {
-//                if (!sharedPreferences.getBoolean(app.KEY_LOAD_FINISHED, false)) {
+//            if (!sharedPreferences.getBoolean(BranchDirectoryMap.KEY_LOAD_FINISHED, false)) {
+//                if (!sharedPreferences.getBoolean(BranchDirectoryMap.KEY_LOAD_FINISHED, false)) {
 //                    dbHelper.clearDatabase();
 //                }
             Random random = new Random();
 
-            GeocodingService service = RetrofitClient.getClient(app.BASE_URL).create(GeocodingService.class);;
+            GeocodingService service = RetrofitClient.getClient(BranchDirectoryMap.BASE_URL).create(GeocodingService.class);
 //                ExecutorService executor = Executors.newSingleThreadExecutor();
             ExecutorService executor = Executors.newFixedThreadPool(BuildConfig.MAX_THREADS);
 
@@ -1380,7 +1383,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 //                        Log.i(TAG, key + " key: " + key2 + " value: " + varMap.get(key).get(key2).toString());
 //                    }
 //                }
-            if (varMap != null && !varMap.keySet().isEmpty()) {
+            if (varMap != null && !varMap.isEmpty()) {
                 Log.i(TAG, "varmap passed, reading");
                 for (String table : varMap.keySet()) {
                     Map<String, List<String>> geocoderMap = new HashMap<>();
@@ -1391,18 +1394,22 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         tables.add(table);
                     }
 //                    Log.i(TAG, "place: " + place.toString());
-                    for (int i = 0; i < place.size(); i += app.NUM_OF_MYITEM_VARS) {
+                    for (int i = 0; i < place.size(); i += BranchDirectoryMap.NUM_OF_MYITEM_VARS) {
                         if ((Boolean) varMap.get(table).get("use_refined")) {
+                            // contains a plus code
                             if (place.get(i + 2).contains("+")) {
                                 geocoderMap.put(place.get(i), Arrays.asList(place.get(i + 2), place.get(i + 1), place.get(i + 2), place.get(i + 3), place.get(i + 4)));
                             } else {
+                                // contains a refined address
                                 if (!place.get(i + 2).isEmpty()) {
                                     geocoderMap.put(place.get(i), Arrays.asList(place.get(i + 1) + ", " + place.get(i + 2), place.get(i + 1), place.get(i + 2), place.get(i + 3), place.get(i + 4)));
+                                // no refined address
                                 } else {
                                     geocoderMap.put(place.get(i), Arrays.asList(place.get(i + 1), place.get(i + 1), place.get(i + 2), place.get(i + 3), place.get(i + 4)));
                                 }
                             }
                         } else {
+                            // use address only
                             geocoderMap.put(place.get(i), Arrays.asList(place.get(i + 1), place.get(i + 1), place.get(i + 2), place.get(i + 3), place.get(i + 4)));
                         }
                         latchCount++;
@@ -1413,9 +1420,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             Log.i(TAG, "latchcount 1: " + latchCount);
 //            Log.i(TAG, "geocoderMaps: " + geocoderMaps.toString());
 
-            if (sharedPreferences.contains(app.KEY_LOAD_ORDER)) {
+            if (sharedPreferences.contains(BranchDirectoryMap.KEY_LOAD_ORDER)) {
                 Type mapType = new TypeToken<Map<String, Map<String, List<String>>>>() {}.getType();
-                missingMaps = gson.fromJson(sharedPreferences.getString(app.KEY_LOAD_ORDER, ""), mapType);
+                missingMaps = gson.fromJson(sharedPreferences.getString(BranchDirectoryMap.KEY_LOAD_ORDER, ""), mapType);
                 for (String table : missingMaps.keySet()) {
                     latchCount += missingMaps.get(table).size();
                 }
@@ -1424,10 +1431,10 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             Log.i(TAG, "latchcount 2: " + latchCount);
 
             if (!databaseExists) {
-                Log.i(TAG, "database not exists");
+                Log.i(TAG, "database does not exist");
             } else {
                 varMapStr = dbHelper.getVarMapStr(false);
-                varMap = gson.fromJson(varMapStr, app.VARMAP_TYPE);
+                varMap = gson.fromJson(varMapStr, BranchDirectoryMap.VARMAP_TYPE);
 //                Log.i(TAG, "new markers: " + markers.toString());
 //                Log.i(TAG, "varMap 1: " + varMap);
                 for (String table : varMap.keySet()) {
@@ -1487,12 +1494,16 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                             }
                         }
                     }
-                    String finalAddress = address;
-//                    Log.i(TAG, "geocoderMap value: " + geocoderMap.get(name).toString());
+                    StringBuilder finalAddress = new StringBuilder(address);
+                    String geoRegion = (String) varMap.get(table).get("geocode_region");
+                    if (!address.contains("+") && !geoRegion.isEmpty()) {
+                        finalAddress.append(", " + geoRegion);
+                    }
+//                    Log.i(TAG, "finalAddress: " + finalAddress);
                     executor.submit(() -> {
                         try {
-                            if (!finalAddress.isEmpty()) {
-                                service.getGeocode(finalAddress, linkApiKey).enqueue(new Callback<GeocodingResponse>() {
+                            if (finalAddress.length() != 0) {
+                                service.getGeocode(finalAddress.toString(), linkApiKey).enqueue(new Callback<>() {
                                     @Override
                                     public void onResponse(Call<GeocodingResponse> call, retrofit2.Response<GeocodingResponse> response) {
                                         if (response.isSuccessful() && response.body() != null && !response.body().getResults().isEmpty()) {
@@ -1563,7 +1574,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         protected void onPostExecute(Void v) {
             Log.i(TAG, "Elapsed time doInBackground: " + (System.currentTimeMillis() - start));
             if (mapHasInnerElements(missingMaps)) {
-                editor.putBoolean(app.KEY_LOAD_FINISHED, false).apply();
+                editor.putBoolean(BranchDirectoryMap.KEY_LOAD_FINISHED, false).apply();
                 Log.i(TAG, "tables: " + tables.toString());
                 for (String table : missingMaps.keySet()) {
                     for (String title : missingMaps.get(table).keySet()) {
@@ -1572,20 +1583,15 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     }
                 }
 
-                dialogUtils.showOkDialog("Warning", getString(R.string.marker_error),
-                    new DialogInterface.OnClickListener() {
-                        @Override
-                        public void onClick(DialogInterface dialog, int id) {
-                            dialog.dismiss();
-                        }
-                    });
+                dialogUtils.showOkDialog(context, getString(R.string.warning), getString(R.string.marker_error),
+                        (dialog, id) -> dialog.dismiss());
 
                 String jsonString = gson.toJson(missingMaps);
 //                Log.i(TAG, "jsonString: " + jsonString);
-                editor.putString(app.KEY_LOAD_ORDER, jsonString).apply();
+                editor.putString(BranchDirectoryMap.KEY_LOAD_ORDER, jsonString).apply();
             } else {
-                editor.remove(app.KEY_LOAD_ORDER);
-                editor.putBoolean(app.KEY_LOAD_FINISHED, true).apply();
+                editor.remove(BranchDirectoryMap.KEY_LOAD_ORDER);
+                editor.putBoolean(BranchDirectoryMap.KEY_LOAD_FINISHED, true).apply();
             }
 
             Collections.sort(tables);
@@ -1624,13 +1630,13 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 db.insert("varmap", null, varMapStrValues);
                 db.setTransactionSuccessful();
             } catch (Exception e) {
-                Log.i(TAG, "--EXCEPTION-- " + e.getMessage());
+                Log.e(TAG, "--EXCEPTION-- " + e.getMessage());
             } finally {
                 db.endTransaction();
                 db.close();
             }
 //            Log.i(TAG, "getvarmapstr: " + dbHelper.getVarMapStr(true));
-            if (BuildConfig.EXPORT_DB && sharedPreferences.getBoolean(app.KEY_LOAD_FINISHED, false)) {
+            if (BuildConfig.EXPORT_DB && sharedPreferences.getBoolean(BranchDirectoryMap.KEY_LOAD_FINISHED, false)) {
                 dbHelper.exportDatabase(BuildConfig.DATABASE_NAME);
             }
             for (String table : tables) {
@@ -1647,7 +1653,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             for (MyItem marker : MyItem.MyItemSorter.sortMyItemsByCode(markers.get(currentTable))) {
                 clusterManager.addItem(marker);
             }
-            clusterManager.cluster();
 
             searchSpinner.setVisibility(View.VISIBLE);
             searchView.setVisibility(View.VISIBLE);
@@ -1667,10 +1672,10 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 Log.i(TAG, "varMap table " + table + " doesn't contain an array");
             }
             ArrayList<String> markerList = (ArrayList<String>) varMap.get(table).get("array");
-            for (int i = 0; i < markerList.size(); i += app.NUM_OF_MYITEM_VARS) {
+            for (int i = 0; i < markerList.size(); i += BranchDirectoryMap.NUM_OF_MYITEM_VARS) {
                 if (markerList.get(i).equals(name)) {
 //                    Log.i(TAG, "removing marker: " + name + " from table: " + table);
-                    markerList.subList(i, i + app.NUM_OF_MYITEM_VARS).clear();
+                    markerList.subList(i, i + BranchDirectoryMap.NUM_OF_MYITEM_VARS).clear();
 //                    Log.i(TAG, "new varMap(" + table + ") array: " + markerList);
                     return;
                 }
@@ -1699,7 +1704,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     geocoderMap.get(name).get(1), geocoderMap.get(name).get(2), geocoderMap.get(name).get(3), geocoderMap.get(name).get(4)));
         }
 
-        public int updateEntry(String tableName, ContentValues values) {
+        public void updateEntry(String tableName, ContentValues values) {
             String codeValue = values.getAsString("code");
             String nameValue = values.getAsString("name");
             for (String key : values.keySet()) {
@@ -1712,8 +1717,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             }
             String whereClause = "code = ? AND name = ?";
             String[] whereArgs = new String[]{codeValue, nameValue};
-            int rowsAffected = db.update(tableName, values, whereClause, whereArgs);
-            return rowsAffected;
+            db.update(tableName, values, whereClause, whereArgs);
         }
 
         public boolean entryExists(String tableName, String code, String name) {
@@ -1733,23 +1737,25 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     private class GetInformationTask extends AsyncTask<Void, Void, Object[]> {
 
-        private Context context;
+        private WeakReference<Activity> activityRef;
+        private final Context context;
         private final Marker marker;
         private final double markerLat;
         private final double markerLng;
 
-        public GetInformationTask(Context context) {
+        public GetInformationTask(Activity activity) {
             if (currentMarker != null) {
                 marker = currentMarker;
                 markerLat = marker.getPosition().latitude;
                 markerLng = marker.getPosition().longitude;
             } else {
-                Log.i(TAG, "currentMarker is null, FIX THIS");
+                Log.e(TAG, "currentMarker is null, FIX THIS");
                 marker = null;
                 markerLat = 1000;
                 markerLng = 1000;
             }
-            this.context = context.getApplicationContext();
+            activityRef = new WeakReference<>(activity);
+            context = activityRef.get();
         }
 
         @Override
@@ -1766,61 +1772,86 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             if (currentItem.getSelected() == -1) {
                 OkHttpClient client = new OkHttpClient();
                 if (!BuildConfig.USE_ADVANCED_ROUTING) {
-                    String url = app.BASE_URL + "directions/json"
+                    linkApiKey = Secrets.getStoredGeocodeApiKey(context);
+                    final StringBuilder url = new StringBuilder(BranchDirectoryMap.BASE_URL + "directions/json"
                             + "?origin=" + lastKnownLocation.getLatitude() + "," + lastKnownLocation.getLongitude()
-                            + "&destination=" + markerLat + "," + markerLng
-                            + "&key=" + linkApiKey;
+                            + "&destination=" + markerLat + "," + markerLng + "&key=" + linkApiKey);
+                    linkApiKey = null;
+
+                    if (!routeMarkers.isEmpty()) {
+                        CountDownLatch latch = new CountDownLatch(1);
+                        Activity activity = activityRef.get();
+                        activity.runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                StringBuilder params = parameterCombiner(true);
+                                if (params.length() > 0) {
+                                    url.append(params);
+                                }
+                                latch.countDown();
+                            }
+                        });
+                        try {
+                            latch.await();
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();    // FIX THIS: add logging
+                        }
+                    }
+
+                    Log.i(TAG, "trafficMode: " + trafficMode);
 
                     switch (trafficMode) {
                         case "No Traffic":
                             break;
                         case "Best Guess":
-                            url += "&traffic_model=best_guess" + "&departure_time=now";
+                            url.append("&traffic_model=best_guess" + "&departure_time=now");
                             break;
                         case "Optimistic":
-                            url += "&traffic_model=optimistic" + "&departure_time=now";
+                            url.append("&traffic_model=optimistic" + "&departure_time=now");
                             break;
                         case "Pessimistic":
-                            url += "&traffic_model=pessimistic" + "&departure_time=now";
+                            url.append("&traffic_model=pessimistic" + "&departure_time=now");
                     }
 
-                    StringBuilder avoidOptions = new StringBuilder();
-                    if (!isTollsEnabled) avoidOptions.append("tolls|");
-                    if (!isHighwaysEnabled) avoidOptions.append("highways|");
-                    if (!isFerriesEnabled) avoidOptions.append("ferries|");
-                    if (avoidOptions.length() > 0) {
-                        avoidOptions.setLength(avoidOptions.length() - 1);
-                        url += "&avoid=" + avoidOptions;
-                    }
+                    Request computeDirectionsRequest = new Request.Builder().url(url.toString()).build();
+//                    Log.i(TAG, "url: " + url);
 
-                    Request request = new Request.Builder().url(url).build();
-                    try (Response response = client.newCall(request).execute()) {
-                        if (response.isSuccessful() && response.body() != null) {
-                            String responseData = response.body().string();
-                            JsonObject jsonObject = JsonParser.parseString(responseData).getAsJsonObject();
-                            if ("OK".equals(jsonObject.get("status").getAsString())) {
-                                JsonArray routes = jsonObject.getAsJsonArray("routes");
-                                if (routes.size() > 0) {
-                                    JsonObject route = routes.get(0).getAsJsonObject();
-                                    JsonObject leg = route.getAsJsonArray("legs").get(0).getAsJsonObject();
-                                    String distance = leg.getAsJsonObject("distance").get("text").getAsString();
-                                    String durationStr = "duration";
-                                    if (!trafficMode.equals("No Traffic")) {
-                                        durationStr += "_in_traffic";
-                                    }
-                                    String duration = leg.getAsJsonObject(durationStr).get("text").getAsString();
-                                    String polyline = route.getAsJsonObject("overview_polyline").get("points").getAsString();
-                                    return new String[]{distance, duration, polyline};
-                                } else {
-                                    Log.i(TAG, "No routes found");
+                    try (Response computeDirectionsResponse = client.newCall(computeDirectionsRequest).execute()) {
+                        if (computeDirectionsResponse.isSuccessful()) {
+                            String responseString = computeDirectionsResponse.body().string();
+                            JsonObject computeDirectionsJson = JsonParser.parseString(responseString).getAsJsonObject();
+                            if (computeDirectionsJson.has("routes") && !computeDirectionsJson.getAsJsonArray("routes").isEmpty()) {
+                                JsonObject route = computeDirectionsJson.getAsJsonArray("routes").get(0).getAsJsonObject();
+                                JsonArray legs = route.getAsJsonArray("legs");
+                                int totalDuration = 0;
+                                int totalDistance = 0;
+                                for (int i = 0; i < legs.size(); i++) {
+                                    JsonObject leg = legs.get(i).getAsJsonObject();
+
+                                    JsonObject duration = leg.getAsJsonObject("duration");
+                                    totalDuration += duration.get("value").getAsInt();
+
+                                    JsonObject distance = leg.getAsJsonObject("distance");
+                                    totalDistance += distance.get("value").getAsInt();
                                 }
+
+                                JsonObject overviewPolyline = route.getAsJsonObject("overview_polyline");
+                                String polyline = overviewPolyline.get("points").getAsString();
+
+                                // encodedPolyline expects a 2D String List so return Object is a
+                                // 2D String List with polyline as the [0][0] element
+                                return new Object[]{formatDistanceForLocale(totalDistance),
+                                        formatComputeRouteDuration(totalDuration, false),
+                                        formatComputeRouteDuration(totalDuration, true),
+                                        new ArrayList<>(Collections.singletonList(new ArrayList<>(Collections.singletonList(polyline)))),
+                                        null};
                             } else {
-                                Log.i(TAG, "Error response: " + jsonObject.get("status").getAsString());
-                                Log.i(TAG, "Error response: " + jsonObject.get("error_message").getAsString());
+                                Log.e(TAG, "Error response: " + computeDirectionsJson.get("status").getAsString());
+                                Log.e(TAG, "Error response: " + computeDirectionsJson.get("error_message").getAsString());
                             }
                         }
                     } catch (IOException e) {
-                        Log.i(TAG, "HTTP Request Failed: " + e.getMessage());
+                        Log.e(TAG, "HTTP Request Failed: " + e.getMessage());
                     }
                 } else {
                     JsonObject root = new JsonObject();
@@ -1855,7 +1886,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                             locationObject.add("latLng", latLngObject);
                             waypointObject.add("location", locationObject);
 
-                            // "via" is optional
+                            // "via" is optional, via implies that the waypoint is not a stop
 //                            waypointObject.addProperty("via", true);
 
                             intermediatesArray.add(waypointObject);
@@ -1881,7 +1912,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     linkApiKey = Secrets.getStoredGeocodeApiKey(context);
                     try {
                         Request computeRoutesRequest = new Request.Builder()
-                                .url(app.ROUTES_URL)
+                                .url(BranchDirectoryMap.ROUTES_URL)
                                 .addHeader("Content-Type", "application/json")
                                 .addHeader("X-Goog-Api-Key", linkApiKey)
                                 .addHeader("X-Goog-FieldMask",
@@ -1893,11 +1924,11 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                                 .build();
                         try (Response computeRoutesResponse = client.newCall(computeRoutesRequest).execute()) {
                             linkApiKey = null;
-                            if (computeRoutesResponse.isSuccessful() && computeRoutesResponse.body() != null) {
-                                String computeRoutesResponseData = computeRoutesResponse.body().string();
-//                                Log.i(TAG, "computeRoutesResponseData: " + computeRoutesResponseData);
-                                JsonObject computeRoutesJson = JsonParser.parseString(computeRoutesResponseData).getAsJsonObject();
-                                if (computeRoutesJson.has("routes") && computeRoutesJson.getAsJsonArray("routes").size() > 0) {
+                            if (computeRoutesResponse.isSuccessful()) {
+                                String responseString = computeRoutesResponse.body().string();
+//                                Log.i(TAG, "responseString: " + responseString);
+                                JsonObject computeRoutesJson = JsonParser.parseString(responseString).getAsJsonObject();
+                                if (computeRoutesJson.has("routes") && !computeRoutesJson.getAsJsonArray("routes").isEmpty()) {
                                     JsonObject route = computeRoutesJson.getAsJsonArray("routes").get(0).getAsJsonObject();
                                     JsonArray legs = route.getAsJsonArray("legs");
                                     String routeDurationStr = route.get("duration").getAsString();
@@ -1922,14 +1953,14 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                                         allLegPolys.add(allStepPolys);
                                     }
 
-                                    String formattedDistance = formatDistanceForLocale((int) totalDistanceMeters);
+                                    String formattedDistance = formatDistanceForLocale(totalDistanceMeters);
                                     String formattedDuration;
-                                    int differenceMinutes = 0;
+                                    long differenceMinutes = 0;
                                     if (trafficMode.equals("No Traffic")) {
-                                        formattedDuration = formatComputeRouteDuration(totalStaticSeconds + "s");
+                                        formattedDuration = formatComputeRouteDuration(totalStaticSeconds, false);
                                     } else {
-                                        formattedDuration = formatComputeRouteDuration(totalSeconds + "s");
-                                        differenceMinutes = (int) ((totalSeconds - totalStaticSeconds) / 60);
+                                        formattedDuration = formatComputeRouteDuration(totalSeconds, false);
+                                        differenceMinutes = (totalSeconds - totalStaticSeconds) / 60;
                                     }
 
                                     Log.i(TAG, "distance: " + totalDistanceMeters);
@@ -1970,14 +2001,14 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                                             Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                                     );
 
-                                    return new Object[]{formattedDistance, formattedDuration, allLegPolys, spannable};
+                                    return new Object[]{formattedDistance, formattedDuration, formatComputeRouteDuration(totalSeconds, true), allLegPolys, spannable};
                                 }
                             } else {
-                                Log.i(TAG, "computeRoutesResponse error: " + computeRoutesResponse.message());
+                                Log.e(TAG, "computeRoutesResponse error: " + computeRoutesResponse.message());
                             }
                         }
                     } catch (Exception e) {
-                        Log.i(TAG, "Error processing requests: " + e.getMessage(), e);
+                        Log.e(TAG, "Error processing requests: " + e.getMessage(), e);
                     }
                 }
             }
@@ -1986,40 +2017,53 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
         @Override
         protected void onPostExecute(Object[] result) {
+            String distance;
+            String duration;
+            String arrival;
             if (result != null) {
                 distance = (String) result[0];
                 oldDistance = distance;
                 duration = (String) result[1];
                 oldDuration = duration;
-                encodedPolyline = (List<List<String>>) result[2];
+                arrival = (String) result[2];
+                oldArrival = arrival;
+                encodedPolyline = (List<List<String>>) result[3];
                 oldPolyline = deepCopy2d(encodedPolyline);
-                trafficText = (SpannableString) result[3];
-                oldTrafficText = trafficText;
+                if (result[4] != null) {
+                    customAdapter.setTrafficText((SpannableString) result[4]);
+                    oldTrafficText = customAdapter.getTrafficText();
+                }
             } else {
                 distance = oldDistance;
                 duration = oldDuration;
+                arrival = oldArrival;
+                encodedPolyline = oldPolyline;
                 if (oldPolyline != null) {
                     oldPolyline = oldPolyline.subList(0, oldPolyline.size() - (lastSelected ? 0 : 1));
-                    encodedPolyline = new ArrayList<>(oldPolyline);
+                    encodedPolyline = deepCopy2d(oldPolyline);
                 } else {
                     oldPolyline = null;
                     encodedPolyline = null;
                 }
-                trafficText = oldTrafficText;
+                if (oldTrafficText != null) {
+                    customAdapter.setTrafficText(oldTrafficText);
+                }
             }
-            Log.i(TAG, "old size: " + oldPolyline.size());
-            Log.i(TAG, "encoded size: " + encodedPolyline.size());
+//            Log.i(TAG, "old size: " + oldPolyline.size());
+//            Log.i(TAG, "encoded size: " + encodedPolyline.size());
             Log.i(TAG, "lastSelected: " + lastSelected);
-            infoText = distance + " | " + duration;
+            customAdapter.setInfoText(distance + " | " + duration + " | " + arrival);
             customRenderer.setShouldCluster(false);
             clusterManager.cluster();
-            marker.showInfoWindow();
+            redrawInfoWindow();
             if (encodedPolyline != null) {
                 createPolys();
+            } else {
+                Log.i(TAG, "encodedPolyline is null");
             }
         }
 
-        private String formatDistanceForLocale(int distanceMeters) {
+        private String formatDistanceForLocale(long distanceMeters) {
             Locale locale = Locale.getDefault();
             String country = locale.getCountry();
             if (useMiles(country)) {
@@ -2032,35 +2076,32 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
 
         private boolean useMiles(String country) {
-            if ("US".equalsIgnoreCase(country) ||
+            return "US".equalsIgnoreCase(country) ||
                     "LR".equalsIgnoreCase(country) ||
                     "MM".equalsIgnoreCase(country) ||
-                    "GB".equalsIgnoreCase(country)) {
-                return true;
-            } else {
-                return false;
-            }
+                    "GB".equalsIgnoreCase(country);
         }
 
-        private String formatComputeRouteDuration(String durationString) {
-            if (durationString.endsWith("s")) {
-                durationString = durationString.substring(0, durationString.length() - 1);
+        private String formatComputeRouteDuration(long totalSeconds, boolean returnArrivalTime) {
+            if (!returnArrivalTime) {
+                long hours = totalSeconds / 3600;
+                long minutes = (totalSeconds % 3600) / 60;
+                StringBuilder formatted = new StringBuilder();
+                if (hours > 0) {
+                    formatted.append(hours).append(" hr").append(hours > 1 ? "s " : " ");
+                }
+                if (minutes > 0) {
+                    formatted.append(minutes).append(" min").append(minutes > 1 ? "s" : "");
+                }
+                if (hours == 0 && minutes == 0) {
+                    formatted.append("0 mins");
+                }
+                return formatted.toString().trim();
+            } else {
+                long currentMillis = System.currentTimeMillis();
+                long arrivalMillis = currentMillis + totalSeconds * 1000;
+                return sdf.format(new java.util.Date(arrivalMillis));
             }
-            double totalSecondsDouble = Double.parseDouble(durationString);
-            int totalSeconds = (int) Math.round(totalSecondsDouble);
-            int hours = totalSeconds / 3600;
-            int minutes = (totalSeconds % 3600) / 60;
-            StringBuilder formatted = new StringBuilder();
-            if (hours > 0) {
-                formatted.append(hours).append(" hr").append(hours > 1 ? "s " : " ");
-            }
-            if (minutes > 0) {
-                formatted.append(minutes).append(" min").append(minutes > 1 ? "s" : "");
-            }
-            if (hours == 0 && minutes == 0) {
-                formatted.append("0 mins");
-            }
-            return formatted.toString().trim();
         }
     }
 }

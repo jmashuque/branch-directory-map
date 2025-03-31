@@ -3,7 +3,8 @@
 # values based on your csv files and their formatting and delete this example file as
 # well as all provided example csv assets. Note that single space values, like for
 # DELIM, must be escaped with a \  (backslash) or enclosed in " " (double quotes) to be
-# preserved.
+# preserved. If you select SETTINGSPERFILE then all values that can have multiple values
+# need to have the appropriate number of commas, even for empty values.
 
 # ANDROID PROJECT SETTINGS
 
@@ -43,16 +44,14 @@ ADDRESSINDEX=1,1
 # (int)[] y-index(es) of address column
 ADDRESSOFFSET=0,0
 
-# (bool) use double query for traffic metrics
+# (bool) use Routes API instead of Directions API for detailed traffic metrics, higher
+# pricing than basic routing
 ADVANCEDROUTES=true
-
-# (bool) allow more than one marker to occupy the same latitude/longitude coordinates
-ALLOWDUPLICATES=false
 
 # (int) minimum delay between queries, do not exceed 50 requests / second for free tier
 BASEDELAY=10
 
-# (str)[] delimiter(s) for multiple codes, use " " for a single space
+# (str)[] delimiter(s) for multiple codes, cannot use the same values from DELIM
 CODEDELIM=,/
 
 # (str)[] prefix(es) for codes
@@ -65,13 +64,16 @@ COLOURS=red,green
 COLUMNSPERROW=4,4
 
 # (str) internal db file name
-DBFILE=markers.db
+DBFILE=branches.db
 
-# (str) auto-select file from FILENAMES
-DEFAULTFILE=LA_branches.csv
+# (str) default file from FILENAMES, if not specified then first file in FILENAMES is used
+DEFAULTFILE=
 
 # (str)[] delimiter(s) between code and name, use " " for a single space
 DELIM=" "," "
+
+# (bool) allow more than one marker to occupy the same latitude/longitude coordinates
+DUPLICATES=false
 
 # (bool) use embedded db or csv file(s)
 EMBEDDED=true
@@ -79,7 +81,7 @@ EMBEDDED=true
 # (str) embedded db file name
 EMBEDDEDDB=
 
-# (bool) export db file to download folder
+# (bool) export db file to download folder, uses DBFILE as file name
 EXPORT=true
 
 # (str)[] embedded csv file name(s)
@@ -87,6 +89,10 @@ FILENAMES=LA_branches.csv,CA_branches.csv
 
 # (bool) use firebase remote config to get api key, otherwise use api.dat and store in ndk
 FIREBASE=true
+
+# (str)[] string to add to all addresses when geocoding, except for addresses containing
+# plus codes, place in double quotes if values contain commas
+GEOREGION="United States","United States"
 
 # (int)[] ignore first x row(s)
 IGNOREROWSBEGIN=1,1
@@ -96,6 +102,15 @@ IGNOREROWSEND=0,0
 
 # (int) max number of intermediate markers, current api limit of 25
 INTERMEDIATES=25
+
+# (bool) use ambient light sensor to dynamically adjust theme to light or dark, in
+# development, do not change
+LIGHTSENSOR=false
+
+# (str) optional map ID to apply styling from your map instances stored on Maps Platform,
+# will override JSON styling, disables dark and mono switches, changes pricing of map
+# usage if used, in development, do not change
+MAPID=
 
 # (int) max number of threads to use for geocode requests, do not overload Google servers
 MAXTHREADS=2
@@ -114,6 +129,9 @@ PHONEINDEX=3,3
 
 # (int)[] y-index(es) of phone number column
 PHONEOFFSET=0,0
+
+# (bool) use a proxy for all requests, in development, do not change
+PROXY=false
 
 # (int) max random delay between queries, prevents request collisions, do not exceed
 # 50 requests / second for free tier
@@ -138,14 +156,18 @@ ROWSPERSET=1,1
 # value used, settings that can have multiple values are denoted by [] after (type)
 SETTINGSPERFILE=true
 
+# (str)[4] raw resource file names for map styling, for reference only, do not change,
+# you can alter the files themselves to apply custom styling
+STYLEJSON=light.json,dark.json,light_mono.json,dark_mono.json
+
 # (int) timeout in seconds for firebase api key remote config
 TIMEOUT=10
 
-# (int)[] x-index(es) of title column
+# (int)[] x-index(es) of title column, title includes branch code and optional name
 TITLEINDEX=0,0
 
-# (int)[] y-index(es) of title column
+# (int)[] y-index(es) of title column, title includes branch code and optional name
 TITLEOFFSET=0,0
 
-# (float)[] ratio for light, moderate, heavy, and severe traffic
-TRAFFICMETRICS=1.05,1.15,1.25,1.45
+# (float)[4] ratio for light, moderate, heavy, and severe traffic
+TRAFFICMETRICS=1.05,1.15,1.25,1.40

@@ -6,32 +6,23 @@ import android.content.DialogInterface;
 
 public class DialogUtils {
 
-    private Context context;
-
-    public DialogUtils(Context context) {
-        this.context = context;
-    }
-
-    public void showYesNoDialog(String title, String message,
+    public void showYesNoDialog(Context context, String title, String message,
                                 DialogInterface.OnClickListener onYesClickListener,
                                 DialogInterface.OnClickListener onNoClickListener) {
         AlertDialog.Builder builder = new AlertDialog.Builder(context);
         builder.setTitle(title);
         builder.setMessage(message);
+        builder.setCancelable(false);
 
-        builder.setPositiveButton("Yes", new DialogInterface.OnClickListener() {
-            public void onClick(DialogInterface dialog, int id) {
-                if (onYesClickListener != null) {
-                    onYesClickListener.onClick(dialog, id);
-                }
+        builder.setPositiveButton(R.string.yes, (dialog, id) -> {
+            if (onYesClickListener != null) {
+                onYesClickListener.onClick(dialog, id);
             }
         });
 
-        builder.setNegativeButton("No", new DialogInterface.OnClickListener() {
-            public void onClick(DialogInterface dialog, int id) {
-                if (onNoClickListener != null) {
-                    onNoClickListener.onClick(dialog, id);
-                }
+        builder.setNegativeButton(R.string.no, (dialog, id) -> {
+            if (onNoClickListener != null) {
+                onNoClickListener.onClick(dialog, id);
             }
         });
 
@@ -39,17 +30,15 @@ public class DialogUtils {
         dialog.show();
     }
 
-    public void showOkDialog(String title, String message, DialogInterface.OnClickListener onOkClickListener) {
+    public void showOkDialog(Context context, String title, String message, DialogInterface.OnClickListener onOkClickListener) {
         AlertDialog.Builder builder = new AlertDialog.Builder(context);
         builder.setTitle(title);
         builder.setMessage(message);
+        builder.setCancelable(false);
 
-        builder.setPositiveButton("OK", new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int id) {
-                if (onOkClickListener != null) {
-                    onOkClickListener.onClick(dialog, id);
-                }
+        builder.setPositiveButton(R.string.ok, (dialog, id) -> {
+            if (onOkClickListener != null) {
+                onOkClickListener.onClick(dialog, id);
             }
         });
 

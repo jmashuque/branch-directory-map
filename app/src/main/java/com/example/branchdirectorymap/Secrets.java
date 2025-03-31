@@ -3,44 +3,98 @@ package com.example.branchdirectorymap;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
-import android.security.keystore.KeyGenParameterSpec;
-import android.security.keystore.KeyProperties;
 import android.util.Base64;
 import android.util.Log;
-import androidx.security.crypto.EncryptedSharedPreferences;
-import androidx.security.crypto.MasterKey;
-
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.security.KeyStore;
-import javax.crypto.Cipher;
-import javax.crypto.KeyGenerator;
-import javax.crypto.SecretKey;
-import javax.crypto.spec.GCMParameterSpec;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 public class Secrets {
 
     private static final String TAG = "SYS-SECRETS";
-    private static final BranchDirectoryMap app = BranchDirectoryMap.getInstance();
 
-    private static SecretKey getAESKey() throws Exception {
-        KeyStore keyStore = KeyStore.getInstance(app.ANDROID_KEYSTORE);
-        keyStore.load(null);
+    public static class EncryptedSharedPreferencesReflection {
 
-        if (keyStore.containsAlias(app.KEY_ALIAS)) {
-            return ((KeyStore.SecretKeyEntry) keyStore.getEntry(app.KEY_ALIAS, null)).getSecretKey();
+        public static Object createEncryptedSharedPreferences(Context context, String prefsName) throws Exception {
+            Class<?> espClass = Class.forName("androidx.security.crypto.EncryptedSharedPreferences");
+            Class<?> masterKeyClass = Class.forName("androidx.security.crypto.MasterKey");
+            Class<?> builderClass = Class.forName("androidx.security.crypto.MasterKey$Builder");
+
+            Constructor<?> builderCtor = builderClass.getConstructor(Context.class);
+            Object builderInstance = builderCtor.newInstance(context);
+
+            Class<?> keySchemeEnumClass = Class.forName("androidx.security.crypto.MasterKey$KeyScheme");
+            Method keySchemeValueOfMethod = keySchemeEnumClass.getMethod("valueOf", String.class);
+            Object aes256GcmValue = keySchemeValueOfMethod.invoke(null, "AES256_GCM");
+
+            Method setKeySchemeMethod = builderClass.getMethod("setKeyScheme", keySchemeEnumClass);
+            setKeySchemeMethod.invoke(builderInstance, aes256GcmValue);
+
+            Method buildMethod = builderClass.getMethod("build");
+            Object masterKey = buildMethod.invoke(builderInstance);
+
+            Class<?> espKeySchemeClass = Class.forName("androidx.security.crypto.EncryptedSharedPreferences$PrefKeyEncryptionScheme");
+            Method espKeySchemeValueOfMethod = espKeySchemeClass.getMethod("valueOf", String.class);
+            Object keySchemeEnum = espKeySchemeValueOfMethod.invoke(null, "AES256_SIV");
+
+            Class<?> espValueSchemeClass = Class.forName("androidx.security.crypto.EncryptedSharedPreferences$PrefValueEncryptionScheme");
+            Method espValueSchemeValueOfMethod = espValueSchemeClass.getMethod("valueOf", String.class);
+            Object valueSchemeEnum = espValueSchemeValueOfMethod.invoke(null, "AES256_GCM");
+
+            Method espCreate = espClass.getMethod("create", Context.class, String.class, masterKeyClass, espKeySchemeClass, espValueSchemeClass);
+            return espCreate.invoke(null, context, prefsName, masterKey, keySchemeEnum, valueSchemeEnum);
+        }
+    }
+
+    private static Object getAESKey() throws Exception {
+        Class<?> keyStoreClass = Class.forName("java.security.KeyStore");
+        Method getInstanceMethod = keyStoreClass.getMethod("getInstance", String.class);
+        Object keyStore = getInstanceMethod.invoke(null, BranchDirectoryMap.ANDROID_KEYSTORE);
+
+        Method loadMethod = keyStoreClass.getMethod("load", java.security.KeyStore.LoadStoreParameter.class);
+        loadMethod.invoke(keyStore, (java.security.KeyStore.LoadStoreParameter) null);
+
+        Method containsAliasMethod = keyStoreClass.getMethod("containsAlias", String.class);
+        boolean containsAlias = (boolean) containsAliasMethod.invoke(keyStore, BranchDirectoryMap.KEY_ALIAS);
+
+        if (containsAlias) {
+            Class<?> secretKeyEntryClass = Class.forName("java.security.KeyStore$SecretKeyEntry");
+            Method getEntryMethod = keyStoreClass.getMethod("getEntry", String.class, java.security.KeyStore.ProtectionParameter.class);
+            Object secretKeyEntry = getEntryMethod.invoke(keyStore, BranchDirectoryMap.KEY_ALIAS, null);
+            Method getSecretKeyMethod = secretKeyEntryClass.getMethod("getSecretKey");
+            return getSecretKeyMethod.invoke(secretKeyEntry);
         }
 
-        KeyGenerator keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, app.ANDROID_KEYSTORE);
-        keyGenerator.init(new KeyGenParameterSpec.Builder(
-                app.KEY_ALIAS,
-                KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
-                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                .setKeySize(256)
-                .build());
+        Class<?> keyGeneratorClass = Class.forName("javax.crypto.KeyGenerator");
+        Method keyGeneratorGetInstanceMethod = keyGeneratorClass.getMethod("getInstance", String.class, String.class);
+        Object keyGenerator = keyGeneratorGetInstanceMethod.invoke(null, "AES", BranchDirectoryMap.ANDROID_KEYSTORE);
 
-        return keyGenerator.generateKey();
+        Class<?> keyGenParameterSpecClass = Class.forName("android.security.keystore.KeyGenParameterSpec$Builder");
+        Constructor<?> keyGenParameterSpecBuilderCtor = keyGenParameterSpecClass.getConstructor(String.class, int.class);
+        Object keyGenParameterSpecBuilder = keyGenParameterSpecBuilderCtor.newInstance(BranchDirectoryMap.KEY_ALIAS, 3); // PURPOSE_ENCRYPT | PURPOSE_DECRYPT
+
+        Class<?> keyPropertiesClass = Class.forName("android.security.keystore.KeyProperties");
+        Field blockModeGCMField = keyPropertiesClass.getField("BLOCK_MODE_GCM");
+        Object blockModeGCM = blockModeGCMField.get(null);
+        Field encryptionPaddingNoneField = keyPropertiesClass.getField("ENCRYPTION_PADDING_NONE");
+        Object encryptionPaddingNone = encryptionPaddingNoneField.get(null);
+
+        Method setBlockModesMethod = keyGenParameterSpecClass.getMethod("setBlockModes", String[].class);
+        setBlockModesMethod.invoke(keyGenParameterSpecBuilder, (Object) new String[]{blockModeGCM.toString()});
+        Method setEncryptionPaddingsMethod = keyGenParameterSpecClass.getMethod("setEncryptionPaddings", String[].class);
+        setEncryptionPaddingsMethod.invoke(keyGenParameterSpecBuilder, (Object) new String[]{encryptionPaddingNone.toString()});
+        Method setKeySizeMethod = keyGenParameterSpecClass.getMethod("setKeySize", int.class);
+        setKeySizeMethod.invoke(keyGenParameterSpecBuilder, 256);
+        Method buildMethod = keyGenParameterSpecClass.getMethod("build");
+        Object keyGenParameterSpec = buildMethod.invoke(keyGenParameterSpecBuilder);
+
+        Method initMethod = keyGeneratorClass.getMethod("init", java.security.spec.AlgorithmParameterSpec.class);
+        initMethod.invoke(keyGenerator, keyGenParameterSpec);
+
+        Method generateKeyMethod = keyGeneratorClass.getMethod("generateKey");
+        return generateKeyMethod.invoke(keyGenerator);
     }
 
     public interface OnApiKeyReceivedListener {
@@ -49,17 +103,9 @@ public class Secrets {
 
     public static void fetchGeocodeApiKey(Context context, OnApiKeyReceivedListener listener) {
         try {
-            SecretKey aesKey = getAESKey();
+            Object aesKey = getAESKey();
 
-            EncryptedSharedPreferences sharedPreferences = (EncryptedSharedPreferences) EncryptedSharedPreferences.create(
-                    context,
-                    app.SECURE_PREFS,
-                    new MasterKey.Builder(context)
-                            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                            .build(),
-                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-            );
+            Object sharedPreferences = EncryptedSharedPreferencesReflection.createEncryptedSharedPreferences(context, BranchDirectoryMap.SECURE_PREFS);
 
             if (BuildConfig.USE_FIREBASE) {
                 try {
@@ -100,12 +146,20 @@ public class Secrets {
                                     boolean isSuccessful = (boolean) isSuccessfulMethod.invoke(task);
                                     if (isSuccessful) {
                                         Method getStringMethod = firebaseRCClass.getMethod("getString", String.class);
-                                        String apiKey = (String) getStringMethod.invoke(firebaseRCInstance, app.KEY_APIKEY);
+                                        String apiKey = (String) getStringMethod.invoke(firebaseRCInstance, BranchDirectoryMap.KEY_APIKEY);
                                         if (apiKey != null && !apiKey.isEmpty()) {
                                             try {
                                                 byte[] encryptedData = encrypt(apiKey, aesKey);
-                                                sharedPreferences.edit().putString(app.KEY_APIKEY,
-                                                        Base64.encodeToString(encryptedData, Base64.DEFAULT)).apply();
+
+                                                Method editMethod = sharedPreferences.getClass().getMethod("edit");
+                                                Object editor = editMethod.invoke(sharedPreferences);
+
+                                                Method putStringMethod = editor.getClass().getMethod("putString", String.class, String.class);
+                                                putStringMethod.invoke(editor, BranchDirectoryMap.KEY_APIKEY, Base64.encodeToString(encryptedData, Base64.DEFAULT));
+
+                                                Method applyMethod = editor.getClass().getMethod("apply");
+                                                applyMethod.invoke(editor);
+
                                             } catch (Exception e) {
                                                 e.printStackTrace(); // FIX THIS: add logging
                                             } finally {
@@ -133,8 +187,15 @@ public class Secrets {
                 String apiKey = NativeLib.getApiKey();
                 if (apiKey != null && !apiKey.isEmpty()) {
                     byte[] encryptedData = encrypt(apiKey, aesKey);
-                    sharedPreferences.edit().putString(app.KEY_APIKEY,
-                            Base64.encodeToString(encryptedData, Base64.DEFAULT)).apply();
+                    Method editMethod = sharedPreferences.getClass().getMethod("edit");
+                    Object editor = editMethod.invoke(sharedPreferences);
+
+                    Method putStringMethod = editor.getClass().getMethod("putString", String.class, String.class);
+                    putStringMethod.invoke(editor, BranchDirectoryMap.KEY_APIKEY, Base64.encodeToString(encryptedData, Base64.DEFAULT));
+
+                    Method applyMethod = editor.getClass().getMethod("apply");
+                    applyMethod.invoke(editor);
+
                     Log.i(TAG, "Successfully fetched and stored API key from NativeLib");
                     listener.onApiKeyReceived(true);
                 } else {
@@ -150,19 +211,13 @@ public class Secrets {
     public static String getStoredGeocodeApiKey(Context context) {
         String decryptedApiKey = null;
         try {
-            SecretKey aesKey = getAESKey();
+            Object aesKey = getAESKey();
 
-            EncryptedSharedPreferences sharedPreferences = (EncryptedSharedPreferences) EncryptedSharedPreferences.create(
-                    context,
-                    app.SECURE_PREFS,
-                    new MasterKey.Builder(context)
-                            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                            .build(),
-                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-            );
+            Object sharedPreferences = EncryptedSharedPreferencesReflection.createEncryptedSharedPreferences(context, BranchDirectoryMap.SECURE_PREFS);
 
-            String encryptedApiKey = sharedPreferences.getString(app.KEY_APIKEY, null);
+            Method getStringMethod = sharedPreferences.getClass().getMethod("getString", String.class, String.class);
+            String encryptedApiKey = (String) getStringMethod.invoke(sharedPreferences, BranchDirectoryMap.KEY_APIKEY, null);
+
             if (encryptedApiKey != null) {
                 byte[] encryptedData = Base64.decode(encryptedApiKey, Base64.DEFAULT);
                 decryptedApiKey = decrypt(encryptedData, aesKey);
@@ -171,43 +226,55 @@ public class Secrets {
             return decryptedApiKey;
 
         } catch (Exception e) {
-            e.printStackTrace(); // FIX THIS: add logging
+            e.printStackTrace();
             return null;
         } finally {
             decryptedApiKey = null;
         }
     }
 
-    private static byte[] encrypt(String data, SecretKey secretKey) throws Exception {
-        Cipher cipher = Cipher.getInstance(app.CIPHER_TRANSFORMATION);
-        cipher.init(Cipher.ENCRYPT_MODE, secretKey);
+    private static byte[] encrypt(String data, Object secretKey) throws Exception {
+        Class<?> cipherClass = Class.forName("javax.crypto.Cipher");
+        Method getInstanceMethod = cipherClass.getMethod("getInstance", String.class);
+        Object cipher = getInstanceMethod.invoke(null, BranchDirectoryMap.CIPHER_TRANSFORMATION);
 
-        byte[] iv = cipher.getIV();
-        byte[] encryptedData = cipher.doFinal(data.getBytes("UTF-8"));
+        Method initMethod = cipherClass.getMethod("init", int.class, java.security.Key.class);
+        initMethod.invoke(cipher, 1, secretKey); // Cipher.ENCRYPT_MODE
 
-        byte[] combined = new byte[app.IV_SIZE + encryptedData.length];
-        System.arraycopy(iv, 0, combined, 0, app.IV_SIZE);
-        System.arraycopy(encryptedData, 0, combined, app.IV_SIZE, encryptedData.length);
+        Method getIVMethod = cipherClass.getMethod("getIV");
+        byte[] iv = (byte[]) getIVMethod.invoke(cipher);
+
+        Method doFinalMethod = cipherClass.getMethod("doFinal", byte[].class);
+        byte[] encryptedData = (byte[]) doFinalMethod.invoke(cipher, data.getBytes(StandardCharsets.UTF_8));
+
+        byte[] combined = new byte[BranchDirectoryMap.IV_SIZE + encryptedData.length];
+        System.arraycopy(iv, 0, combined, 0, BranchDirectoryMap.IV_SIZE);
+        System.arraycopy(encryptedData, 0, combined, BranchDirectoryMap.IV_SIZE, encryptedData.length);
 
         return combined;
     }
 
-    private static String decrypt(byte[] encryptedData, SecretKey secretKey) throws Exception {
-        Cipher cipher = Cipher.getInstance(app.CIPHER_TRANSFORMATION);
+    private static String decrypt(byte[] encryptedData, Object secretKey) throws Exception {
+        Class<?> cipherClass = Class.forName("javax.crypto.Cipher");
+        Method getInstanceMethod = cipherClass.getMethod("getInstance", String.class);
+        Object cipher = getInstanceMethod.invoke(null, BranchDirectoryMap.CIPHER_TRANSFORMATION);
 
-        byte[] iv = Arrays.copyOfRange(encryptedData, 0, app.IV_SIZE);
-        byte[] cipherText = Arrays.copyOfRange(encryptedData, app.IV_SIZE, encryptedData.length);
+        byte[] iv = Arrays.copyOfRange(encryptedData, 0, BranchDirectoryMap.IV_SIZE);
+        byte[] cipherText = Arrays.copyOfRange(encryptedData, BranchDirectoryMap.IV_SIZE, encryptedData.length);
 
-        GCMParameterSpec spec = new GCMParameterSpec(app.GCM_TAG_SIZE, iv);
-        cipher.init(Cipher.DECRYPT_MODE, secretKey, spec);
+        Class<?> gcmParameterSpecClass = Class.forName("javax.crypto.spec.GCMParameterSpec");
+        Constructor<?> gcmParameterSpecConstructor = gcmParameterSpecClass.getConstructor(int.class, byte[].class);
+        Object spec = gcmParameterSpecConstructor.newInstance(BranchDirectoryMap.GCM_TAG_SIZE, iv);
 
-        byte[] decryptedData = cipher.doFinal(cipherText);
-        String decryptedString = new String(decryptedData, "UTF-8");
+        Method initMethod = cipherClass.getMethod("init", int.class, java.security.Key.class, java.security.spec.AlgorithmParameterSpec.class);
+        initMethod.invoke(cipher, 2, secretKey, spec); // Cipher.DECRYPT_MODE
 
-        return decryptedString;
+        Method doFinalMethod = cipherClass.getMethod("doFinal", byte[].class);
+        byte[] decryptedData = (byte[]) doFinalMethod.invoke(cipher, cipherText);
+        return new String(decryptedData, StandardCharsets.UTF_8);
     }
 
-    public class NativeLib {
+    public static class NativeLib {
 
         static {
             if (!BuildConfig.USE_FIREBASE) {

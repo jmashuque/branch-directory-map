@@ -22,7 +22,9 @@ render.experimental.xml
 
 # Project Specific
 api.dat
-Z.bat
+adbc.bat
+
+# Dev Specific
 branches.csv
 customers.csv
-markers2.db
+markers.db

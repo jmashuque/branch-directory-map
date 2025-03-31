@@ -2,7 +2,6 @@ package com.example.branchdirectorymap;
 
 import android.content.ContentResolver;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.Cursor;
@@ -15,7 +14,6 @@ import android.util.Log;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.activity.result.ActivityResultCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
@@ -40,7 +38,6 @@ import java.util.concurrent.ConcurrentHashMap;
 public class FileSelectionActivity extends AppCompatActivity {
 
     private static final String TAG = "SYS-FILES";
-    private BranchDirectoryMap app;
     private ActivityResultLauncher<String> pickCsvFile;
     private ContentResolver contentResolver;
     private InputStream inputStream;
@@ -60,71 +57,67 @@ public class FileSelectionActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_fileselection);
 
-        app = (BranchDirectoryMap) getApplication();
-        sharedPreferences = getSharedPreferences(app.SHARED_PREFS, Context.MODE_PRIVATE);
+        sharedPreferences = getSharedPreferences(BranchDirectoryMap.SHARED_PREFS, Context.MODE_PRIVATE);
         editor = sharedPreferences.edit();
         dbHelper = new LocationDatabaseHelper(this);
         gson = new Gson();
 
         Log.i(TAG, "FileSelectionActivity created");
 
-        if (sharedPreferences.getBoolean(app.KEY_USE_LAST, false) ||
-                sharedPreferences.contains(app.KEY_LOAD_OVERRIDE)) {
+        if (sharedPreferences.getBoolean(BranchDirectoryMap.KEY_USE_LAST, false) ||
+                sharedPreferences.contains(BranchDirectoryMap.KEY_LOAD_OVERRIDE)) {
             reloadState();
         } else {
-            pickCsvFile = registerForActivityResult(new ActivityResultContracts.GetContent(), new ActivityResultCallback<Uri>() {
-                @Override
-                public void onActivityResult(Uri uri) {
-                    if (uri != null) {
-                        Log.i(TAG, "uri: " + uri.toString());
-                        TextView textView = findViewById(R.id.textView_file);
-                        try {
-                            inputStream = contentResolver.openInputStream(uri);
-                            String fileName = uri.toString();
-                            String fileExt = null;
-                            Log.i(TAG, "fileName: " + fileName);
-                            if (ContentResolver.SCHEME_FILE.equals(uri.getScheme())) {
-                                File file = new File(uri.getPath());
-                                fileName = file.getName();
-                            } else if (ContentResolver.SCHEME_CONTENT.equals(uri.getScheme())) {
-                                Cursor returnCursor = context.getContentResolver().query(uri, null, null, null, null);
-                                if (returnCursor != null && returnCursor.moveToFirst()) {
-                                    int index = returnCursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
-                                    fileName = returnCursor.getString(index);
-                                    returnCursor.close();
-                                }
-    //                            fileExt = MimeTypeMap.getSingleton().getExtensionFromMimeType(contentResolver.getType(uri));
-                            } else {
-                                Log.i(TAG, "---Unknown scheme: not programmed---");
-                                finish();
+            pickCsvFile = registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> {
+                if (uri != null) {
+                    Log.i(TAG, "uri: " + uri);
+                    TextView textView = findViewById(R.id.textView_file);
+                    try {
+                        inputStream = contentResolver.openInputStream(uri);
+                        String fileName = uri.toString();
+                        String fileExt = null;
+                        Log.i(TAG, "fileName: " + fileName);
+                        if (ContentResolver.SCHEME_FILE.equals(uri.getScheme())) {
+                            File file = new File(uri.getPath());
+                            fileName = file.getName();
+                        } else if (ContentResolver.SCHEME_CONTENT.equals(uri.getScheme())) {
+                            Cursor returnCursor = context.getContentResolver().query(uri, null, null, null, null);
+                            if (returnCursor != null && returnCursor.moveToFirst()) {
+                                int index = returnCursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                                fileName = returnCursor.getString(index);
+                                returnCursor.close();
                             }
-    //                        fileName = fileName.substring(fileName.lastIndexOf("/") == -1 ? 0 : fileName.lastIndexOf("/") + 1);
-    //                        fileName = fileName.substring(0, fileName.contains(".") ? fileName.lastIndexOf(".") : fileName.length());
-                            fileExt = fileName.substring(fileName.lastIndexOf(".") + 1);
-                            Log.i(TAG, "fileName Extracted: " + fileName);
-                            Log.i(TAG, "fileExt Extracted: " + fileExt);
-                            if (fileExt.equals("csv")) {
-                                entries.add(fileName);
-                                csvToArray(inputStream, entries.get(0));
-                                prepMaps(1, entries);
-//                                Log.i(TAG, "varmap after file selection: " + varMap.toString());
-                            } else if (fileExt.equals("db")) {
-                                if (!dbLoader(uri)) {
-                                    throw new IOException();
-                                }
-                            } else {
-                                Log.i(TAG, "Type Error");
-                                textView.setText(R.string.type_warn);
-                            }
-                            parseArray(entries);
-                            callMap();
-                        } catch (FileNotFoundException e) {
-                            Log.i(TAG, "---FileNotFoundException---");
-                            textView.setText(R.string.file_not_found);
-                        } catch (IOException e) {
-                            Log.i(TAG, "---IOException--- while trying to read db file - 1");
-                            textView.setText(R.string.db_warn1);
+//                            fileExt = MimeTypeMap.getSingleton().getExtensionFromMimeType(contentResolver.getType(uri));
+                        } else {
+                            Log.i(TAG, "---Unknown scheme: not programmed---");
+                            finish();
                         }
+//                        fileName = fileName.substring(fileName.lastIndexOf("/") == -1 ? 0 : fileName.lastIndexOf("/") + 1);
+//                        fileName = fileName.substring(0, fileName.contains(".") ? fileName.lastIndexOf(".") : fileName.length());
+                        fileExt = fileName.substring(fileName.lastIndexOf(".") + 1);
+                        Log.i(TAG, "fileName Extracted: " + fileName);
+                        Log.i(TAG, "fileExt Extracted: " + fileExt);
+                        if (fileExt.equals("csv")) {
+                            entries.add(fileName);
+                            csvToArray(inputStream, entries.get(0));
+                            prepMaps(1, entries);
+//                                Log.i(TAG, "varmap after file selection: " + varMap.toString());
+                        } else if (fileExt.equals("db")) {
+                            if (!dbLoader(uri)) {
+                                throw new IOException();
+                            }
+                        } else {
+                            Log.i(TAG, "Type Error");
+                            textView.setText(R.string.type_warn);
+                        }
+                        parseArray(entries);
+                        callMap();
+                    } catch (FileNotFoundException e) {
+                        Log.i(TAG, "---FileNotFoundException---");
+                        textView.setText(R.string.file_not_found);
+                    } catch (IOException e) {
+                        Log.i(TAG, "---IOException--- while trying to read db file - 1");
+                        textView.setText(R.string.db_warn);
                     }
                 }
             });
@@ -134,7 +127,7 @@ public class FileSelectionActivity extends AppCompatActivity {
             entries = new ArrayList<>();
             varMap = new ConcurrentHashMap<>();
             entryPre = new HashMap<>();
-            dialogUtils = new DialogUtils(this);
+            dialogUtils = new DialogUtils();
 
             boolean isDbFine = false;
             if (!BuildConfig.EMBEDDED_DB.isEmpty()) {
@@ -144,13 +137,8 @@ public class FileSelectionActivity extends AppCompatActivity {
             if (isDbFine || BuildConfig.EMBEDDED_DB.isEmpty()) {
                 fileLoader();
             } else {
-                dialogUtils.showOkDialog("Fatal Error", getString(R.string.db_warn1),
-                        new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialog, int id) {
-                                finish();
-                            }
-                        });
+                dialogUtils.showOkDialog(context, "Fatal Error", getString(R.string.db_warn),
+                        (dialog, id) -> finish());
             }
         }
     }
@@ -235,7 +223,7 @@ public class FileSelectionActivity extends AppCompatActivity {
         Log.i(TAG, "using entries: " + entries);
         Map<String, Object> entryMap;
         for (int i = 0; i < len; i++) {
-            if (entries.get(i).equals("")) {
+            if (entries.get(i).isEmpty()) {
                 continue;
             }
             entryMap = new HashMap<>();
@@ -251,6 +239,11 @@ public class FileSelectionActivity extends AppCompatActivity {
                 entryMap.put("use_phone", Boolean.parseBoolean(BuildConfig.USE_PHONE.split(",")[i].trim()));
 //                Log.i(TAG, "use_refined: " + Boolean.parseBoolean(BuildConfig.USE_REFINED.split(",")[i].trim()));
                 entryMap.put("use_refined", Boolean.parseBoolean(BuildConfig.USE_REFINED.split(",")[i].trim()));
+                // regex splits based on commas but only when not surrounded by double quotes
+                // this allows for values with commas to be preserved
+                String geoReg = BuildConfig.GEOCODE_REGION.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)")[i].trim().replace("\"", "");
+//                Log.i(TAG, "geocode_region: " + geoReg);
+                entryMap.put("geocode_region", geoReg);
 //                Log.i(TAG, "delimiter: " + BuildConfig.DELIMITER.split(",", -1)[i]);
                 entryMap.put("delimiter", BuildConfig.DELIMITER.split(",", -1)[i]);
 //                Log.i(TAG, "code_prefix: " + BuildConfig.CODE_PREFIX.split(",", -1)[i].trim());
@@ -312,7 +305,7 @@ public class FileSelectionActivity extends AppCompatActivity {
     private void parseArray(ArrayList<String> entries) {
         Log.i(TAG, "parseArray");
         for (String entry : entries) {
-            if (entry.equals("")) {
+            if (entry.isEmpty()) {
                 continue;
             }
             Log.i(TAG, "parseArray entry: " + entry);
@@ -331,19 +324,19 @@ public class FileSelectionActivity extends AppCompatActivity {
             Log.i(TAG, "entry: " + entry + " rowsPerSet: " + rowsPerSet + " titleOffset: " + titleOffset + " addressOffset: " + addressOffset + " refinedAddressOffset: " + refinedAddressOffset + " phoneOffset: " + phoneOffset);
             Log.i(TAG, "ignore_rows_begin: " + varMap.get(entry).get("ignore_rows_begin") + " ignore_rows_end: " + varMap.get(entry).get("ignore_rows_end"));
             for (int i = (int) varMap.get(entry).get("ignore_rows_begin"); i < entryPre.get(entry).size()-(int) varMap.get(entry).get("ignore_rows_end"); i += rowsPerSet) {
-                ArrayList<String> entryPost = new ArrayList<String>();
+                ArrayList<String> entryPost = new ArrayList<>();
                 // add full name and address, stripping leading and trailing double quotes
                 entryPost.add(stripQuotesToArray(entryPre.get(entry).get(i + titleOffset)).get((int) varMap.get(entry).get("title_index")));
                 entryPost.add(stripQuotesToArray(entryPre.get(entry).get(i + addressOffset)).get((int) varMap.get(entry).get("address_index")));
                 // add refined
                 if ((Boolean) varMap.get(entry).get("use_refined")) {
-                    entryPost.add(new ArrayList<String>(Arrays.asList(entryPre.get(entry).get(i + refinedAddressOffset))).get((int) varMap.get(entry).get("refined_address_index")));
+                    entryPost.add(new ArrayList<>(Arrays.asList(entryPre.get(entry).get(i + refinedAddressOffset))).get((int) varMap.get(entry).get("refined_address_index")));
                 } else {
                     entryPost.add("");
                 }
                 // add phone
                 if ((Boolean) varMap.get(entry).get("use_phone")) {
-                    entryPost.add(new ArrayList<String>(Arrays.asList(entryPre.get(entry).get(i + phoneOffset))).get((int) varMap.get(entry).get("phone_index")));
+                    entryPost.add(new ArrayList<>(Arrays.asList(entryPre.get(entry).get(i + phoneOffset))).get((int) varMap.get(entry).get("phone_index")));
                 } else {
                     entryPost.add("");
                 }
@@ -383,7 +376,7 @@ public class FileSelectionActivity extends AppCompatActivity {
             showDialog();
         } else {
             Log.i(TAG, "embedded db conf loaded, will override");
-            editor.putBoolean(app.KEY_LOAD_OVERRIDE, true).apply();
+            editor.putBoolean(BranchDirectoryMap.KEY_LOAD_OVERRIDE, true).apply();
             callNextActivity();
         }
     }
@@ -391,36 +384,26 @@ public class FileSelectionActivity extends AppCompatActivity {
     private void reloadState() {
         Log.i(TAG, "reloadState");
         String varMapStr = dbHelper.getVarMapStr(true);
-        if (sharedPreferences.contains(app.KEY_LOAD_OVERRIDE)) {
+        if (sharedPreferences.contains(BranchDirectoryMap.KEY_LOAD_OVERRIDE)) {
             varMap = null;
         } else {
-            varMap = gson.fromJson(varMapStr, app.VARMAP_TYPE);
+            varMap = gson.fromJson(varMapStr, BranchDirectoryMap.VARMAP_TYPE);
         }
         callNextActivity();
     }
 
     private void showDialog() {
-//        Log.i(TAG, "case3.1");
-
-        dialogUtils.showYesNoDialog("Confirm", "Load this file at startup from now on?",
-            new DialogInterface.OnClickListener() {
-                @Override
-                public void onClick(DialogInterface dialog, int id) {
-//                        Log.i(TAG, "case3.2");
-                    editor.putBoolean(app.KEY_USE_LAST, true).apply();
+        dialogUtils.showYesNoDialog(context, "Confirm", "Load this file at startup from now on?",
+                (dialog, id) -> {
+                    editor.putBoolean(BranchDirectoryMap.KEY_USE_LAST, true).apply();
                     dialog.dismiss();
                     callNextActivity();
-                }
-            },
-            new DialogInterface.OnClickListener() {
-                @Override
-                public void onClick(DialogInterface dialog, int id) {
-//                        Log.i(TAG, "case3.3");
-                    editor.putBoolean(app.KEY_USE_LAST, false).apply();
+                },
+                (dialog, id) -> {
+                    editor.putBoolean(BranchDirectoryMap.KEY_USE_LAST, false).apply();
                     dialog.dismiss();
                     callNextActivity();
-                }
-            });
+                });
     }
 
     public void callNextActivity() {
@@ -446,17 +429,12 @@ public class FileSelectionActivity extends AppCompatActivity {
     public void onBackPressed() {
         if (doubleBackToExitPressedOnce) {
             super.onBackPressed();
-            finish();
+            finishAffinity();
         }
 
         doubleBackToExitPressedOnce = true;
         Toast.makeText(this, "Please press back again to exit", Toast.LENGTH_SHORT).show();
 
-        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                doubleBackToExitPressedOnce = false;
-            }
-        }, 2000);
+        new Handler(Looper.getMainLooper()).postDelayed(() -> doubleBackToExitPressedOnce = false, 2000);
     }
 }
