@@ -55,9 +55,13 @@ Detailed instructions coming soon. For now just clone the repository, unzip it, 
 ## adbc.bat
 
 I have included a helper batch file `create_adbc.bat` which creates my little adb companion which is a simple script to ease issues with getting adb to connect your test device to Android Studio. Open a new terminal window and run the following command:
-```.\create_adbc "<adb directory>" "<device IP address>" "<optional port number>"```
+```
+.\create_adbc "<adb directory>" "<device IP address>" "<optional port number>"
+```
 Replace the <> values with the appropriate parameters, preserving the double quotes. This will create a file called 'adbc.bat' in the same folder. By default, since API 31, Android randomizes the port number for tcp/ip every time wireless debugging starts. This little script will force port 5555 through adb, but this setting will reset every time you restart your device. To change port to 5555, run the following command:
-```.\adbc "<device port>"```
+```
+.\adbc "<device port>"
+```
 Provide the proper wireless debugging port number. `adbc.bat` will change the port number and reconnect. From then on, until your device restarts, you can use `.\adbc` to reconnect from within Android Studio on the default port 5555. After a restart, just provide the port number again. To disconnect from the device, run `.\adbc -d`.
 
 ## Roadmap
