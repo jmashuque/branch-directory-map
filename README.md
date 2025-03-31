@@ -62,7 +62,10 @@ Replace the <> values with the appropriate parameters, preserving the double quo
 ```
 .\adbc "<device port>"
 ```
-Provide the proper wireless debugging port number. `adbc.bat` will change the port number and reconnect. From then on, until your device restarts, you can use `.\adbc` to reconnect from within Android Studio on the default port 5555. After a restart, just provide the port number again. To disconnect from the device, run `.\adbc -d`.
+Provide the proper wireless debugging port number. `adbc.bat` will change the port number and reconnect. From then on, until your device restarts, you can use `.\adbc` to reconnect from within Android Studio on the default port 5555. After a restart, just provide the port number again. To disconnect from the device, run the following command:
+```
+.\adbc -d
+```
 
 ## Roadmap
 
