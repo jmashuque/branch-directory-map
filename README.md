@@ -9,7 +9,7 @@ This project and associated README file are under active development and may cha
 - [Gallery](#gallery)
 - [Requirements](#requirements)
 - [Installation](#installation)
-- [adbc.bat](#adbcbat)]
+- [adbc.bat](#adbcbat)
 - [Roadmap](#roadmap)
 - [Security](#security)
 - [Data Collection](#data-collection)
