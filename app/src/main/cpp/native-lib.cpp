@@ -10,8 +10,8 @@
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
 
-#ifdef GOOGLE_API_KEY_HEX
-const char* encodedApiKey = TOSTRING(GOOGLE_API_KEY_HEX);
+#ifdef DATA
+const char* encodedApiKey = TOSTRING(DATA);
 #endif
 
 std::string decodeHex(const std::string &hex) {

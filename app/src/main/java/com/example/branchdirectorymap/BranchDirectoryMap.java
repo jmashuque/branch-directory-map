@@ -24,8 +24,9 @@ public class BranchDirectoryMap extends Application {
     public static final String KEY_LOAD_OVERRIDE = "loadOverride";
     public static final String KEY_USE_LAST = "useLast";
     public static final String KEY_APIKEY_LOADED = "apiKeyLoaded";
+    public static final String KEY_SETTINGS_LOADED = "settingsLoaded";
     public static final String BASE_URL = "https://maps.googleapis.com/maps/api/";
-    public static final String DIR_URL = "https://www.google.com/maps/dir/?api=1&dir_action=navigate&destination=";
+    public static final String DIR_URL = "https://www.google.com/maps/dir/?api=1&dir_action=navigate&travelmode=driving&destination=";
     public static final String ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes";
     public static final int NUM_OF_MYITEM_VARS = 5;
     public static final int SEARCH_LEVELS = 4;

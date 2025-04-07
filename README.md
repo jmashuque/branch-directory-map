@@ -22,7 +22,7 @@ Branch Directory Map is my latest Android app, coded mostly in Java using Androi
 ## Features
 
 - use either Directions API for simple routing or advanced routing features using Routes API
-- route to up to 25 intermediate branches (maximum for API's) within one route using waypoints
+- add to up to 25 intermediate branches within one route using waypoints
 - CSV or DB files can either be hard-coded with the app or read from a file by the user using `ActivityResultContracts.GetContent()`
 - geocode using either just address, or address + postal code, or Google plus codes (if detected), and optionally add a custom modifier to all addresses
 - ability to bundle DB files with release with pre-geocoded markers so users don't need to geocode (very costly for hundreds of markers per user)
@@ -31,7 +31,7 @@ Branch Directory Map is my latest Android app, coded mostly in Java using Androi
 - conditional approach to dependencies/imports so you can either implement Firebase Remote Config or Java NDK C++ obfuscation to retrieve the insecure API key
 - includes two sample CSV files in assets folder, along with the geocoded markers in a DB file, with a sample gradle.properties.example file with the right settings to geocode/map the locations in the CSV files
 - optionally uses [RootBeer](https://github.com/scottyab/rootbeer) (by [Scott Alexander-Bown](https://github.com/scottyab)) to prevent root access and denies debugging mode to further protect the insecure requests API key
-- ability to change map layers including traffic and satellite views, various traffic routing models, route preferences like tolls/highways/ferries, and a custom template for dark themed map
+- ability to change map layers including traffic and satellite views, various traffic routing models, route preferences like tolls/highways/ferries, and custom templates for dark and monochrome maps
 
 ## Gallery
 
@@ -42,7 +42,7 @@ Coming soon.
 - Android Studio 2024 or later
 - Android 6.0 Marshmallow (API 23) or later required (to use `EncryptedSharedPreferences`)
 - Google Cloud account (free to make, requires valid credit card, must create a new project, $100 USD credit per month for non-commercial use)
-- two Google API keys, one secure and restricted to the Android, the app's package name, SHA-1, and the Maps SDK for Android API, the other insecure and restricted to Google Directions/Geocoding/Routes API's
+- two Google API keys: one secure and restricted to only Android, the app's package name plus SHA-1, and the Maps SDK for Android API; the other insecure and restricted to Google Directions/Geocoding/Routes API's
 - to protect insecure API key: either a Firebase account (must create a new project to not link with Google Cloud) with Remote Config, or Java NDK for C++ obfuscation
 - file called `api.dat` (included in `.gitignore`) in your root project folder with the app API key on the first line, and if using NDK then the requests API key on the second line, this file should not be bundled with a build or committed to a repository
 - if using Firebase Remote Config, get the `google-services.json` from Firebase and place it in your `app\src` folder, and create a new Remote Config parameter called `geocode_api_key` with the value of the requests API key
@@ -54,18 +54,39 @@ Detailed instructions coming soon. For now just clone the repository, unzip it, 
 
 ## adbc.bat
 
-I have included a helper batch file `create_adbc.bat` which creates my little adb companion which is a simple script to ease issues with getting adb to connect your test device to Android Studio. Open a new terminal window and run the following command:
+I have included a helper batch file `create_adbc.bat` which creates my little adb companion (adbc), which is a simple script to run adb/adb emu/gradlew commands from terminal in Android Studio, including pre-programmed commands. Open a new terminal window and run the following command:
 ```
-.\create_adbc "<adb directory>" "<device IP address>" "<optional port number>"
+.\create_adbc "<adb directory>" <device IP address> <optional port number>
 ```
-Replace the <> values with the appropriate parameters, preserving the double quotes. This will create a file called 'adbc.bat' in the same folder. By default, since API 31, Android randomizes the port number for tcp/ip every time wireless debugging starts. This little script will force port 5555 through adb, but this setting will reset every time you restart your device. To change port to 5555, run the following command:
+Replace the <> values with the appropriate parameters, preserving the double quotes. This will create a file called 'adbc.bat' in the same folder. By default, since API 31, Android randomizes the port number for tcp/ip every time wireless debugging starts. This little script will force port 5555, or your specified optional port, through adb. But this setting will reset every time you restart your device. To change port to 5555, run the following command:
 ```
-.\adbc "<device port>"
+.\adbc <device port>
 ```
-Provide the proper wireless debugging port number. `adbc.bat` will change the port number and reconnect. From then on, until your device restarts, you can use `.\adbc` to reconnect from within Android Studio on the default port 5555. After a restart, just provide the port number again. To disconnect from the device, run the following command:
+Provide the proper wireless debugging port number. `adbc.bat` will change the port number and reconnect. From then on, until your device restarts, you can use `.\adbc` to reconnect from within Android Studio on the default port 5555, or your optional port, even if wireless debugging isn't explicitly enabled on the device. After a restart, just provide the port number again. To disconnect from the device, run the following command:
 ```
-.\adbc -d
+.\adbc dscn
 ```
+To directly pass arguments to adb use the following command:
+```
+.\adbc -a <arguments>
+```
+You can run the following command to mitigate issues with gradle daemon taking up too much memory or not releasing files to clean them:
+```
+.\adbc stop
+```
+This calls the gradle wrapper to stop the gradle daemon (OpenJDK Platform binary) process, it will automatically restart when you sync/clean/build. To run other gradlew commands use the following command:
+```
+.\adbc -ga <arguments>
+```
+The script can also run commands for the emulator. For example, to kill the emulator if one instance is running, use the following command:
+```
+.\adbc kill
+```
+To run any other emulator commands use the following command:
+```
+.\adbc -ea <arguments>
+```
+This batch file, and the `create_adbc.bat` file, require that you run it from your project root folder.
 
 ## Roadmap
 
@@ -105,9 +126,28 @@ This app utilizes many Google services including Maps SDK for Android, various M
 - upcoming: proxy option which will disable implementing Firebase Remote Config and `EncryptedSharedPreferences`
 - upcoming: option for automatic route optimization using Traveling Salesman algorithm
 - upcoming: option to use ambient light sensor to implement dark mode dynamically, similar to the Maps app
-- upcoming: specify a Google Map ID to import your custom map style from your cloud project
 - upcoming: persistent settings through use of `SharedPreferences`
-- upcoming: disable relevant interface features when the API key is missing
+- upcoming: option for active speed readout on the map fragment
+- upcoming: ability to specify extra information about branches by reading one or more extra CSV columns
+- upcoming: history and favourites features for branches
+- upcoming: overlay buttons on marker info windows to favourite, refresh, or close the marker
+- upcoming: automatic refreshing when marker info windows are open for a specified amount of time
+- upcoming: theme colour changes for better contrast in both light and dark device themes
+
+### 0.1-alpha4 (2025-04-06)
+- feature: specify a Google Map ID to import your custom map style from your cloud project, will disable dark and monochrome toggles, pricing will be higher per map load
+- major fix: code shrinking works, `proguard-rules.pro` revised to work with reflection implementation, `fullMode` set to false
+- fix: app no longer exports DB if the DB was embedded
+- fix: `google-services.json` is conditionally excluded from the build when not using Firebase Remote Config
+- fix: some devices no longer display the notification bar over the app's search bar
+- fix: disables relevant interface features when the link API key is missing
+- fix: nonspecific logic fixes, interface tweaks, code cleaning
+- fix: changes to text colours for different elements to improve consistency across light and dark themes
+- improved: heavily altered `adbc.bat` to make it more useful, including adding emulator commands and passing arguments to adb/emu/gradlew
+- improved: better handling of intents and passing information when opening Google Maps app
+- improved: more localization support by using string resources for all Toast messages
+- revised: debuggable is now set to false in `build.gradle` and not hardcoded in `AndroidManifest.xml`
+- revised: `libs.versions.toml` updated, CMake version updated, Gradle version updated
 
 ### 0.1-alpha3 (2025-03-30)
 - feature: specify a string to add to all addresses when geocoding for accuracy's sake, except for addresses containing plus codes
@@ -115,7 +155,7 @@ This app utilizes many Google services including Maps SDK for Android, various M
 - feature: allows four styling scenarios (light, dark, light monochrome, dark monochrome) and imports them from `res\raw` folder
 - feature: clicking a cluster will center it the first time and decluster the map the second time
 - feature: `create_adbc.bat` file included, see [adbc.bat](#adbcbat)
-- major fix: using directions API works, requests now include route waypoints as well
+- major fix: using Directions API works, requests now include route waypoints as well
 - fix: logic for location permission handling, permission will be asked once, and app will now work without location permission with traffic metrics and routing disabled
 - fix: MainActivity optimized for devices that restart activities when permissions change
 - fix: DialogUtils overhauled, implementations changed, no more window leaks or cancellable dialogs, and localization support added

@@ -53,6 +53,9 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.MapsInitializer;
+import com.google.android.gms.maps.MapsInitializer.Renderer;
+import com.google.android.gms.maps.OnMapsSdkInitializedCallback;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.Projection;
 import com.google.android.gms.maps.SupportMapFragment;
@@ -77,9 +80,12 @@ import com.google.maps.android.clustering.view.DefaultClusterRenderer;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.Type;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -115,7 +121,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private GoogleMap mMap;
     private FusedLocationProviderClient fusedLocationClient;
     private DialogUtils dialogUtils;
-    private boolean locationPermissionGranted = false;
     private String linkApiKey;
     private String varMapStr;
     private List<String> stylesList;
@@ -151,7 +156,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private Marker tempMarker;
     private MyItem currentItem;
     private final Map<String, Map<MyItem, Marker>> clusterItemMarkerMap = new HashMap<>();
-    private SupportMapFragment mapFragment;
     private CustomSearchView searchView;
     private SimpleCursorAdapter suggestionAdapter;
     private final ArrayList<ArrayList<MyItem>> filteredSuggestions = new ArrayList<>();
@@ -175,6 +179,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private long start;
     private String trafficMode;
     private int mapMode = GoogleMap.MAP_TYPE_NORMAL;
+    private boolean locationPermissionGranted = false;
     private boolean isCentered = false;
     private boolean isInfoWindowOpen = false;
     private boolean isInfoWindowRedraw = false;
@@ -192,7 +197,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_maps);
 
-        mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map_fragment);
+        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map_fragment);
         context = this;
 
         searchView = findViewById(R.id.searchView);
@@ -225,7 +230,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         handleIntent(getIntent());
         mapFragment.getMapAsync(this);
     }
-
+    
     private void getLocationPermission() {
         if (ContextCompat.checkSelfPermission(this.getApplicationContext(),
                 android.Manifest.permission.ACCESS_FINE_LOCATION)
@@ -233,8 +238,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             locationPermissionGranted = true;
             Log.i(TAG, "location permission already granted");
         } else {
-            Toast.makeText(this, "Location permission denied, this app will not work properly",
-                    Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.location_denied), Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -255,29 +259,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private void setupInterface() {
         menuButton = findViewById(R.id.button_menu);
         menuButton.setOnClickListener(v -> {
-            if (!isMenuActive) {
-                menuButton.setImageResource(R.drawable.ic_close);
-                routeButton.setVisibility(View.VISIBLE);
-                layersButton.setVisibility(View.VISIBLE);
-                searchView.closeKeyboard();
-                searchView.clearFocus();
-                isMenuActive = true;
-                RelativeLayout.LayoutParams layoutparam = (RelativeLayout.LayoutParams) clearRouteButton.getLayoutParams();
-                layoutparam.removeRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
-                layoutparam.addRule(RelativeLayout.ABOVE, R.id.button_layers);
-                clearRouteButton.setLayoutParams(layoutparam);
-            } else {
-                menuButton.setImageResource(R.drawable.ic_menu);
-                routeButton.setVisibility(View.GONE);
-                layersButton.setVisibility(View.GONE);
-                routeMenu.setVisibility(View.GONE);
-                layersMenu.setVisibility(View.GONE);
-                isMenuActive = false;
-                RelativeLayout.LayoutParams layoutparam = (RelativeLayout.LayoutParams) clearRouteButton.getLayoutParams();
-                layoutparam.removeRule(RelativeLayout.ABOVE);
-                layoutparam.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
-                clearRouteButton.setLayoutParams(layoutparam);
-            }
+            menuToggler();
         });
         menuButton.setVisibility(View.GONE);
 
@@ -455,13 +437,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
         viewMarkerButton = findViewById(R.id.button_marker_view);
         viewMarkerButton.setOnClickListener(view -> {
-            String address = currentItem.getRefined().contains("+") ? currentItem.getRefined() : currentItem.getSnippet() + ", " + currentItem.getRefined();
-            Uri gmmIntentUri = Uri.parse("geo:0,0?q=" + Uri.encode(address));
-            Intent intent = new Intent(Intent.ACTION_VIEW, gmmIntentUri);
-            intent.setPackage("com.google.android.apps.maps");
-            if (intent.resolveActivity(getPackageManager()) != null) {
-                startActivity(intent);
-            }
+            String address = "geo:0,0?q=" + currentItem.getPosition().latitude + "," + currentItem.getPosition().longitude +
+                    "(" + Uri.encode(currentItem.getTitle()) + ")";
+            openMapsApp(Uri.parse(address));
         });
 
         addMarkerButton = findViewById(R.id.button_marker_add);
@@ -581,7 +559,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             isCentered = false;
         });
 
-        customAdapter = new CustomInfoWindowAdapter(context);
+        customAdapter = new CustomInfoWindowAdapter(this);
         clusterManager.getMarkerCollection().setInfoWindowAdapter(customAdapter);
         customAdapter.setInterface(locationPermissionGranted, BuildConfig.USE_ADVANCED_ROUTING);
         customAdapter.setInfoWindowOpenListener(this);
@@ -590,19 +568,13 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             if (locationPermissionGranted) {
                 LatLng markerPosition = marker.getPosition();
                 String url = BranchDirectoryMap.DIR_URL + markerPosition.latitude + "," + markerPosition.longitude;
-
                 if (!routeMarkers.isEmpty()) {
                     StringBuilder params = parameterCombiner(false);
                     if (params.length() > 0) {
                         url += params;
                     }
                 }
-
-                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                intent.setPackage("com.google.android.apps.maps");
-                if (intent.resolveActivity(getPackageManager()) != null) {
-                    startActivity(intent);
-                }
+                openMapsApp(Uri.parse(url));
             }
         });
         clusterManager.setOnClusterClickListener(cluster -> {
@@ -655,16 +627,19 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     Log.e(TAG, "fetchGeocodeApiKey failed/timed out");
                     dialogUtils.showOkDialog(context, getString(R.string.warning), getString(R.string.key_error),
                             (dialog, id) -> dialog.dismiss());
+                    locationPermissionGranted = false;
+                    customAdapter.setInterface(locationPermissionGranted, BuildConfig.USE_ADVANCED_ROUTING);
+                    loadTextView.setVisibility(View.GONE);
                 }
             });
         } else {
             task.execute();
         }
 
-        if (BuildConfig.MAP_ID.isEmpty()) {
+        if (!BuildConfig.USE_MAP_ID) {
             createMapStyles();
         } else {
-            Log.i(TAG, "map id: " + BuildConfig.MAP_ID);
+            Log.i(TAG, "map id used: " + getString(R.string.map_id));
             switchToggler(switchDark, false);
             switchToggler(switchMono, false);
         }
@@ -690,7 +665,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             int filteredSize = filteredSuggestions.get(0).size() + filteredSuggestions.get(1).size()
                     + filteredSuggestions.get(2).size();
             if (filteredSize < 1) {
-                Toast.makeText(this, "No results found", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.no_results), Toast.LENGTH_SHORT).show();
                 return;
             } else if (filteredSize == 1) {
                 if (!filteredSuggestions.get(0).isEmpty()) {
@@ -701,7 +676,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     correctSuggestion = filteredSuggestions.get(2).get(0);
                 }
             } else {
-                Toast.makeText(this, "Too many results, please select from suggestions", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.many_results), Toast.LENGTH_SHORT).show();
                 return;
             }
         }
@@ -822,6 +797,16 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
     }
 
+    private void openMapsApp(Uri uri) {
+        Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+        intent.setPackage("com.google.android.apps.maps");
+        if (intent.resolveActivity(getPackageManager()) != null) {
+            startActivity(intent);
+        } else {
+            Toast.makeText(this, getString(R.string.gm_not_found), Toast.LENGTH_SHORT).show();
+        }
+    }
+
     private void moveButtonsWithMarker(Point screenPosition) {
         int x = screenPosition.x - markerButtonsLayout.getWidth() / 2;
         int y = screenPosition.y + 20;
@@ -873,6 +858,32 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             }
         }
 //        Log.i(TAG, "styles: " + styles.toString());
+    }
+
+    private void menuToggler() {
+        if (!isMenuActive) {
+            menuButton.setImageResource(R.drawable.ic_close);
+            routeButton.setVisibility(View.VISIBLE);
+            layersButton.setVisibility(View.VISIBLE);
+            searchView.closeKeyboard();
+            searchView.clearFocus();
+            isMenuActive = true;
+            RelativeLayout.LayoutParams layoutparam = (RelativeLayout.LayoutParams) clearRouteButton.getLayoutParams();
+            layoutparam.removeRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
+            layoutparam.addRule(RelativeLayout.ABOVE, R.id.button_layers);
+            clearRouteButton.setLayoutParams(layoutparam);
+        } else {
+            menuButton.setImageResource(R.drawable.ic_menu);
+            routeButton.setVisibility(View.GONE);
+            layersButton.setVisibility(View.GONE);
+            routeMenu.setVisibility(View.GONE);
+            layersMenu.setVisibility(View.GONE);
+            isMenuActive = false;
+            RelativeLayout.LayoutParams layoutparam = (RelativeLayout.LayoutParams) clearRouteButton.getLayoutParams();
+            layoutparam.removeRule(RelativeLayout.ABOVE);
+            layoutparam.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
+            clearRouteButton.setLayoutParams(layoutparam);
+        }
     }
 
     private void switchToggler(SwitchCompat switchButton, boolean enabled) {
@@ -981,7 +992,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             getCurrentLocation(this::GetInformationTaskCreator);
         } else {
             addMarkerButton.setVisibility(View.GONE);
-//            Toast.makeText(this, "Location permission denied, this app will not work properly", Toast.LENGTH_SHORT).show();
         }
         mMap.animateCamera(CameraUpdateFactory.newLatLng(currentMarker.getPosition()), new GoogleMap.CancelableCallback() {
             @Override
@@ -1019,7 +1029,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             customRenderer.setShouldCluster(false);
             clusterManager.cluster();
         } else {
-            Toast.makeText(this, "Maximum number of intermediate steps reached", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.max_intermediates), Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -1061,6 +1071,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 //            Log.i(TAG, "isInfoWindowOpen is: " + isInfoWindowOpen);
         } else if (routeMenu.getVisibility() == View.VISIBLE || layersMenu.getVisibility() == View.VISIBLE) {
             clearMenus("");
+        } else if (isMenuActive) {
+            menuToggler();
         } else {
             if (doubleBackToExitPressedOnce) {
                 super.onBackPressed();
@@ -1068,7 +1080,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 finishAffinity();
             }
             doubleBackToExitPressedOnce = true;
-            Toast.makeText(this, "Please press back again to exit", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.press_back), Toast.LENGTH_SHORT).show();
             new Handler(Looper.getMainLooper()).postDelayed(() -> doubleBackToExitPressedOnce = false, 2000);
         }
     }
@@ -1157,7 +1169,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 decodedPolyline.addAll(PolyUtil.decode(steps));
             }
         }
-        polylines.add(mMap.addPolyline(new PolylineOptions().addAll(decodedPolyline).color(Color.BLUE).width(18f).zIndex(1.0f)));
+        polylines.add(mMap.addPolyline(new PolylineOptions().addAll(decodedPolyline).color(Color.BLUE).width(20f).zIndex(1000)));
     }
 
     @Override
@@ -1340,7 +1352,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     private class MapLoaderTask extends AsyncTask<ArrayList<String>, Void, Void> {
 
-        private final MapsActivity activity;
+        private final Context context;
         private final boolean databaseExists;
         private Map<String, List<ContentValues>> values;
         private CountDownLatch latch;
@@ -1350,9 +1362,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         private final Gson gson = new Gson();
         private final LatLngTracker tracker = new LatLngTracker();
 
-        public MapLoaderTask(MapsActivity activity) {
-            this.activity = activity;
-            databaseExists = LocationDatabaseHelper.DatabaseChecker.isDatabaseExistsAndPopulated(activity, BuildConfig.DATABASE_NAME);
+        public MapLoaderTask(Context context) {
+            this.context = context;
+            databaseExists = LocationDatabaseHelper.DatabaseChecker.isDatabaseExistsAndPopulated(context, BuildConfig.DATABASE_NAME);
 //            Log.i(TAG, "databaseExists: " + databaseExists);
         }
 
@@ -1455,7 +1467,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 missingMaps.clear();
             }
 //            Log.i(TAG, "geocoderMaps: " + geocoderMaps.toString());
-            linkApiKey = Secrets.getStoredGeocodeApiKey(activity.getApplicationContext());
+            linkApiKey = Secrets.getStoredGeocodeApiKey(context);
             for (String table : geocoderMaps.keySet()) {
                 Log.i(TAG, "table: " + table);
                 Map<String, List<String>> geocoderMap = geocoderMaps.get(table);
@@ -1618,12 +1630,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     }
                 }
                 markers = dbHelper.getAllLocations(db);
-//                Log.i(TAG, "markers from dbHelper: " + markers.toString());
                 dbHelper.deleteTable(db, "varmap");
-//                Log.i(TAG, "tables from db 2: " + dbHelper.getTables(db));
-                dbHelper.createTable(db, "varMap.create");
-//                Log.i(TAG, "tables from db 3: " + dbHelper.getTables(db));
-//                Log.i(TAG, "varMap 2: " + varMap);
+                dbHelper.createTable(db, "varMap.create");  // special command for varmap specifically
                 String jsonString = gson.toJson(varMap);
                 ContentValues varMapStrValues = new ContentValues();
                 varMapStrValues.put("string", jsonString);
@@ -1635,15 +1643,16 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 db.endTransaction();
                 db.close();
             }
-//            Log.i(TAG, "getvarmapstr: " + dbHelper.getVarMapStr(true));
-            if (BuildConfig.EXPORT_DB && sharedPreferences.getBoolean(BranchDirectoryMap.KEY_LOAD_FINISHED, false)) {
+            if (BuildConfig.EMBEDDED_DB.isEmpty() && BuildConfig.EXPORT_DB
+                    && sharedPreferences.getBoolean(BranchDirectoryMap.KEY_LOAD_FINISHED, false)) {
                 dbHelper.exportDatabase(BuildConfig.DATABASE_NAME);
             }
             for (String table : tables) {
                 clusterItemMarkerMap.put(table, new HashMap<>());
             }
             if (!BuildConfig.DEFAULT_FILE.isEmpty()) {
-                currentTable = BuildConfig.DEFAULT_FILE.substring(0, BuildConfig.DEFAULT_FILE.contains(".") ? BuildConfig.DEFAULT_FILE.lastIndexOf(".") : BuildConfig.DEFAULT_FILE.length());
+                currentTable = BuildConfig.DEFAULT_FILE.substring(0,
+                        BuildConfig.DEFAULT_FILE.contains(".") ? BuildConfig.DEFAULT_FILE.lastIndexOf(".") : BuildConfig.DEFAULT_FILE.length());
             } else {
                 currentTable = tables.get(0);
             }
@@ -1659,7 +1668,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             loadTextView.setVisibility(View.GONE);
             menuButton.setVisibility(View.VISIBLE);
 
-            Toast.makeText(activity, "Finished loading markers", Toast.LENGTH_SHORT).show();
+            Toast.makeText(context, getString(R.string.finished), Toast.LENGTH_SHORT).show();
         }
 
         private void removeFromVarMap(String table, String name) {

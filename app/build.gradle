@@ -1,5 +1,5 @@
 plugins {
-    alias(libs.plugins.android.application)
+    alias libs.plugins.android.application
     id 'com.google.gms.google-services'
 }
 
@@ -11,7 +11,7 @@ android {
         minSdk 23
         targetSdk 35
         versionCode 1
-        versionName "0.1-alpha3"
+        versionName "0.1-alpha4"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -22,6 +22,7 @@ android {
             def lines = apiFile.readLines()
             if(lines.size() >= 1){
                 mapsApiKey = lines[0].trim()
+                manifestPlaceholders = [MAPS_API_KEY: mapsApiKey]
             } else {
                 throw new GradleException("BUILD FAILED: 'api.dat' is empty")
             }
@@ -32,15 +33,17 @@ android {
                     buildConfigField "boolean", "USE_FIREBASE", "false"
                     externalNativeBuild {
                         cmake {
-                            arguments "-DGOOGLE_API_KEY_HEX=${hexEncodedApiKey}"
-                            cppFlags ''
+                            arguments "-DHEXAGON=${hexEncodedApiKey}"
                         }
                     }
                 } else {
                     buildConfigField "boolean", "USE_FIREBASE", "true"
                 }
+                buildConfigField "boolean", "USE_PROXY", "false"
             } else {
                 buildConfigField "boolean", "USE_FIREBASE", "false"
+                buildConfigField "boolean", "USE_PROXY", "true"
+                buildConfigField "String", "PROXY_URL", "\"" + "${PROXYURL}" + "\""
             }
         } else {
             throw new GradleException("BUILD FAILED: 'api.dat' not found")
@@ -83,10 +86,12 @@ android {
         }
         buildConfigField "String", "TRAFFIC_METRICS", "\"" + "${TRAFFICMETRICS}" + "\""
         if ("${MAPID}" != "") {
-            buildConfigField "String", "MAP_ID", "\"" + "${MAPID}" + "\""
+            resValue "string", "map_id", "${MAPID}"
+            buildConfigField "boolean", "USE_MAP_ID", "true"
             buildConfigField "String", "STYLE_JSON", '""'
         } else {
-            buildConfigField "String", "MAP_ID", '""'
+            resValue "string", "map_id", ""
+            buildConfigField "boolean", "USE_MAP_ID", "false"
             buildConfigField "String", "STYLE_JSON", "\"" + "${STYLEJSON}" + "\""
         }
         if ("${ADVANCEDROUTES}" == "true") {
@@ -137,13 +142,17 @@ android {
         buildConfigField "String", "ADDRESS_OFFSET", "\"" + "${ADDRESSOFFSET}" + "\""
         buildConfigField "String", "REFINED_ADDRESS_OFFSET", "\"" + "${REFINEDADDRESSOFFSET}" + "\""
         buildConfigField "String", "PHONE_OFFSET", "\"" + "${PHONEOFFSET}" + "\""
-
-        manifestPlaceholders = [MAPS_API_KEY: mapsApiKey, GMS_MAP_ID: MAPID]
     }
 
     buildTypes {
         release {
+            debuggable false
             minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            debuggable false
+            minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
@@ -163,8 +172,11 @@ android {
         externalNativeBuild {
             cmake {
                 path file('src/main/cpp/CMakeLists.txt')
-                version '3.22.1'
+                version '3.31.6'
             }
+        }
+        packagingOptions {
+            exclude 'google-services.json'
         }
     }
 }

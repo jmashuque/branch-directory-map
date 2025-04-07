@@ -1,11 +1,11 @@
-cmake_minimum_required(VERSION 3.22.1)
+cmake_minimum_required(VERSION 3.31.6)
 
 project("native-lib" VERSION 1.0.0)
 
-if(DEFINED GOOGLE_API_KEY_HEX)
-    add_compile_definitions(GOOGLE_API_KEY_HEX="${GOOGLE_API_KEY_HEX}")
+if(DEFINED HEXAGON)
+    add_compile_definitions(DATA="${HEXAGON}")
 else()
-    message(WARNING "GOOGLE_API_KEY_HEX is not defined")
+    message(WARNING "HEXAGON is not defined")
 endif()
 
 add_library( native-lib

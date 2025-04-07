@@ -40,6 +40,6 @@
         style="?android:attr/buttonBarButtonStyle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/navi_btn" />
+        android:text="@string/btn_navi" />
 
 </LinearLayout>

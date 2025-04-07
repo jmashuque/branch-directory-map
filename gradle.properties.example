@@ -33,7 +33,10 @@ android.useAndroidX=true
 # thereby reducing the size of the R class for that library
 android.nonTransitiveRClass=true
 
-# Use the following to help with upgrading to gradle 9.0 later
+# Required when using R8/Proguard to preserve reflection
+android.enableR8.fullMode=false
+
+# Use the following to identify issues before upgrading to a future Gradle version
 # org.gradle.warning.mode=all
 
 # USER BUILD SETTINGS
@@ -132,6 +135,9 @@ PHONEOFFSET=0,0
 
 # (bool) use a proxy for all requests, in development, do not change
 PROXY=false
+
+# (str) proxy url, in development, do not change
+PROXYURL=
 
 # (int) max random delay between queries, prevents request collisions, do not exceed
 # 50 requests / second for free tier
