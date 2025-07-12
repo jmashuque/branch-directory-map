@@ -101,25 +101,17 @@ public class MainActivity extends AppCompatActivity {
     private void rootStep() {
         Log.i(TAG, "rootStep");
         if (!BuildConfig.ALLOW_ROOT) {
-            try {
-                Class<?> rootBeerClass = Class.forName("com.scottyab.rootbeer.RootBeer");
-                java.lang.reflect.Constructor<?> constructor = rootBeerClass.getConstructor(Context.class);
-                Object rootBeerInstance = constructor.newInstance(this);
-                java.lang.reflect.Method isRootedMethod = rootBeerClass.getMethod("isRooted");
-                boolean isRooted = (Boolean) isRootedMethod.invoke(rootBeerInstance);
-
-                if (isRooted || Debug.isDebuggerConnected()) {
-                    dialogUtils.showOkDialog(context, "Fatal Error", getString(R.string.root_error),
-                            (dialog, id) -> {
-                                dialog.dismiss();
-                                finishAffinity();
-                            });
-                } else {
-                    Log.i(TAG, "Root check passed");
-                    fileStep();
-                }
-            } catch (Exception e) {
-                Log.e(TAG, "Error checking for root: " + e);
+            Boolean isTerminate = Secrets.isRootOrDebug(this);
+            if (isTerminate) {
+                dialogUtils.showOkDialog(context, "Fatal Error", getString(R.string.root_error),
+                        (dialog, id) -> {
+                            dialog.dismiss();
+                            finishAffinity();
+                        });
+            } else if (!isTerminate) {
+                Log.i(TAG, "Root check passed");
+                fileStep();
+            } else {
                 finishAffinity();
             }
         } else {

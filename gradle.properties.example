@@ -42,7 +42,7 @@ android.enableR8.fullMode=false
 # USER BUILD SETTINGS
 
 # (int)[] x-index(es) of address column
-ADDRESSINDEX=1,1
+ADDRESSINDEX=1,2
 
 # (int)[] y-index(es) of address column
 ADDRESSOFFSET=0,0
@@ -69,10 +69,11 @@ COLUMNSPERROW=4,4
 # (str) internal db file name
 DBFILE=branches.db
 
-# (str) default file from FILENAMES, if not specified then first file in FILENAMES is used
-DEFAULTFILE=
+# (str) default file from FILENAMES, if not specified then first file is up to java
+DEFAULTFILE=LA_branches.csv
 
-# (str)[] delimiter(s) between code and name, use " " for a single space
+# (str)[] delimiter(s) between code and name, use " " for a single space, required if
+# TITLESPLIT is true
 DELIM=" "," "
 
 # (bool) allow more than one marker to occupy the same latitude/longitude coordinates
@@ -103,8 +104,10 @@ IGNOREROWSBEGIN=1,1
 # (int)[] ignore last x non-empty row(s)
 IGNOREROWSEND=0,0
 
-# (int) max number of intermediate markers, current api limit of 25
-INTERMEDIATES=25
+# (int) max number of intermediate markers, regular routing max is 23 and advanced routing
+# max is 25 as defined by Google, for advanced routing exceeding 10 intermediates will
+# result in higher billing rate, for the external Maps App the max intermediates is 9
+INTERMEDIATES=9
 
 # (bool) use ambient light sensor to dynamically adjust theme to light or dark, in
 # development, do not change
@@ -112,7 +115,7 @@ LIGHTSENSOR=false
 
 # (str) optional map ID to apply styling from your map instances stored on Maps Platform,
 # will override JSON styling, disables dark and mono switches, changes pricing of map
-# usage if used, in development, do not change
+# usage if used
 MAPID=
 
 # (int) max number of threads to use for geocode requests, do not overload Google servers
@@ -128,7 +131,7 @@ MULTIROWSETS=false,false
 PHONE=true,true
 
 # (int)[] x-index(es) of phone number column
-PHONEINDEX=3,3
+PHONEINDEX=3,4
 
 # (int)[] y-index(es) of phone number column
 PHONEOFFSET=0,0
@@ -147,7 +150,7 @@ RANDOMDELAY=50
 REFINED=true,true
 
 # (int)[] x-index(es) of refined address column
-REFINEDADDRESSINDEX=2,2
+REFINEDADDRESSINDEX=2,3
 
 # (int)[] y-index(es) of refined address column
 REFINEDADDRESSOFFSET=0,0
@@ -169,11 +172,24 @@ STYLEJSON=light.json,dark.json,light_mono.json,dark_mono.json
 # (int) timeout in seconds for firebase api key remote config
 TIMEOUT=10
 
-# (int)[] x-index(es) of title column, title includes branch code and optional name
-TITLEINDEX=0,0
+# (int)[] x-index(es) of title column, title includes branch code and/or name
+TITLEINDEX=0,1
 
-# (int)[] y-index(es) of title column, title includes branch code and optional name
+# (int)[] y-index(es) of title column, title includes branch code and/or name
 TITLEOFFSET=0,0
 
-# (float)[4] ratio for light, moderate, heavy, and severe traffic
+# (bool)[] combine branch code and name from separate fields, if true then TITLE is
+# assumed to be name and TITLE2 is assumed to be code, DELIM is used as the character
+# between the code and the name internally and when displayed
+TITLESPLIT=false,true
+
+# (int)[] x-index(es) of branch code column, only referenced if TITLESPLIT is true,
+# otherwise TITLE is assumed to contain code
+TITLE2INDEX=,0
+
+# (int)[] y-index(es) of branch code column, only referenced if TITLESPLIT is true,
+# otherwise TITLE is assumed to contain code
+TITLE2OFFSET=,0
+
+# (double)[4] ratio of duration for light, moderate, heavy, and severe traffic
 TRAFFICMETRICS=1.05,1.15,1.25,1.40

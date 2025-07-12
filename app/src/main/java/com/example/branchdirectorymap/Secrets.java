@@ -1,10 +1,17 @@
 package com.example.branchdirectorymap;
 
+import static androidx.core.app.ActivityCompat.finishAffinity;
+
+import android.app.Activity;
 import android.content.Context;
+import android.os.Debug;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Base64;
 import android.util.Log;
+
+import androidx.annotation.Nullable;
+
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -102,6 +109,20 @@ public class Secrets {
     }
 
     public static void fetchGeocodeApiKey(Context context, OnApiKeyReceivedListener listener) {
+        if (!BuildConfig.ALLOW_ROOT) {
+            Boolean isTerminate = isRootOrDebug(context);
+            if (isTerminate) {
+                Log.e(TAG, "Root check failed");
+                listener.onApiKeyReceived(false);
+                return;
+            } else if (!isTerminate) {
+                Log.i(TAG, "Root check passed");
+            } else {
+                Log.e(TAG, "Root check error at isRootOrDebug");
+                listener.onApiKeyReceived(false);
+                return;
+            }
+        }
         try {
             Object aesKey = getAESKey();
 
@@ -209,6 +230,18 @@ public class Secrets {
     }
 
     public static String getStoredGeocodeApiKey(Context context) {
+        if (!BuildConfig.ALLOW_ROOT) {
+            Boolean isTerminate = isRootOrDebug(context);
+            if (isTerminate) {
+                Log.e(TAG, "Root check failed");
+                return null;
+            } else if (!isTerminate) {
+                Log.i(TAG, "Root check passed");
+            } else {
+                Log.e(TAG, "Root check error at isRootOrDebug");
+                return null;
+            }
+        }
         String decryptedApiKey = null;
         try {
             Object aesKey = getAESKey();
@@ -272,6 +305,20 @@ public class Secrets {
         Method doFinalMethod = cipherClass.getMethod("doFinal", byte[].class);
         byte[] decryptedData = (byte[]) doFinalMethod.invoke(cipher, cipherText);
         return new String(decryptedData, StandardCharsets.UTF_8);
+    }
+
+    public static @Nullable Boolean isRootOrDebug(Context context) {
+        try {
+            Class<?> rootBeerClass = Class.forName("com.scottyab.rootbeer.RootBeer");
+            java.lang.reflect.Constructor<?> constructor = rootBeerClass.getConstructor(Context.class);
+            Object rootBeerInstance = constructor.newInstance(context);
+            java.lang.reflect.Method isRootedMethod = rootBeerClass.getMethod("isRooted");
+            boolean isRooted = (Boolean) isRootedMethod.invoke(rootBeerInstance);
+            return isRooted || Debug.isDebuggerConnected();
+        } catch (Exception e) {
+            Log.e(TAG, "Error checking for root: " + e);
+            return null;
+        }
     }
 
     public static class NativeLib {

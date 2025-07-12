@@ -61,6 +61,8 @@ public class LocationDatabaseHelper extends SQLiteOpenHelper {
                     "name TEXT NOT NULL," +
                     "address TEXT NOT NULL," +
                     "refined TEXT NOT NULL," +
+                    "waypoints TEXT NOT NULL," +
+                    "positions TEXT NOT NULL," +
                     "phone TEXT NOT NULL," +
                     "colour TEXT NOT NULL," +
                     "PRIMARY KEY (code, name)" +
@@ -164,9 +166,11 @@ public class LocationDatabaseHelper extends SQLiteOpenHelper {
                 @SuppressLint("Range") String nam = cursor.getString(cursor.getColumnIndex("name"));
                 @SuppressLint("Range") String add = cursor.getString(cursor.getColumnIndex("address"));
                 @SuppressLint("Range") String ref = cursor.getString(cursor.getColumnIndex("refined"));
+                @SuppressLint("Range") String way = cursor.getString(cursor.getColumnIndex("waypoints"));
+                @SuppressLint("Range") String pos = cursor.getString(cursor.getColumnIndex("positions"));
                 @SuppressLint("Range") String tel = cursor.getString(cursor.getColumnIndex("phone"));
                 @SuppressLint("Range") String clr = cursor.getString(cursor.getColumnIndex("colour"));
-                mapmarkers.add(new MyItem(lat, lng, cod, nam, add, ref, tel, clr));
+                mapmarkers.add(new MyItem(lat, lng, cod, nam, add, ref, way, pos, tel, clr));
             }
             cursor.close();
             markers.put(table, mapmarkers);

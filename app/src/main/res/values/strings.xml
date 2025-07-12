@@ -26,7 +26,9 @@
     <string name="no_results">No results found</string>
     <string name="many_results">Too many results, please select from suggestions</string>
     <string name="press_back">Please press back again to exit</string>
-    <string name="max_intermediates">Maximum number of intermediate steps reached</string>
+    <string name="exceed_intermediates">Max number of intermediate steps adjusted to meet Google\'s limits</string>
+    <string name="max_intermediates">Max number of intermediate steps reached</string>
+    <string name="max_intermediates_ext">Google Maps App has a limit of 9 intermediate steps including waypoints, please shorten the route</string>
     <string name="gm_not_found">Google Maps was not found on your device</string>
     <string name="location_denied">Location permission denied, this app will not work properly</string>
     <string-array name="traffic_dropdown">

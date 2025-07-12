@@ -53,9 +53,6 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
-import com.google.android.gms.maps.MapsInitializer;
-import com.google.android.gms.maps.MapsInitializer.Renderer;
-import com.google.android.gms.maps.OnMapsSdkInitializedCallback;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.Projection;
 import com.google.android.gms.maps.SupportMapFragment;
@@ -80,12 +77,9 @@ import com.google.maps.android.clustering.view.DefaultClusterRenderer;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.UnsupportedEncodingException;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.Type;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -121,6 +115,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private GoogleMap mMap;
     private FusedLocationProviderClient fusedLocationClient;
     private DialogUtils dialogUtils;
+    private Gson gson;
     private String linkApiKey;
     private String varMapStr;
     private List<String> stylesList;
@@ -156,6 +151,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private Marker tempMarker;
     private MyItem currentItem;
     private final Map<String, Map<MyItem, Marker>> clusterItemMarkerMap = new HashMap<>();
+    private final List<Marker> waypointList = new ArrayList<>();
     private CustomSearchView searchView;
     private SimpleCursorAdapter suggestionAdapter;
     private final ArrayList<ArrayList<MyItem>> filteredSuggestions = new ArrayList<>();
@@ -178,6 +174,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private String currentTable;
     private long start;
     private String trafficMode;
+    private int local_intermediates;
+    private int intermediates_count = 0;
     private int mapMode = GoogleMap.MAP_TYPE_NORMAL;
     private boolean locationPermissionGranted = false;
     private boolean isCentered = false;
@@ -202,6 +200,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
         searchView = findViewById(R.id.searchView);
         markerButtonsLayout = findViewById(R.id.layout_marker_buttons);
+        gson = new Gson();
         dbHelper = new LocationDatabaseHelper(this);
         dialogUtils = new DialogUtils();
         sdf = new java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault());
@@ -217,6 +216,13 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         for (int i = 0; i < trafficMetricsStr.length; i++) {
             trafficMetrics[i] = Double.parseDouble(trafficMetricsStr[i].trim());
 //            Log.i(TAG, "trafficMetrics[" + i + "]: " + trafficMetrics[i]);
+        }
+
+        if (BranchDirectoryMap.SCREENSHOT_MODE) {
+            getWindow().getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_FULLSCREEN
+                            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                            | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
         }
 
         Log.i(TAG, "MapsActivity created");
@@ -437,8 +443,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
         viewMarkerButton = findViewById(R.id.button_marker_view);
         viewMarkerButton.setOnClickListener(view -> {
-            String address = "geo:0,0?q=" + currentItem.getPosition().latitude + "," + currentItem.getPosition().longitude +
-                    "(" + Uri.encode(currentItem.getTitle()) + ")";
+            String address = "geo:0,0?q=" + currentItem.getPosition().latitude + "," + currentItem.getPosition().longitude
+                    + "(" + Uri.encode(currentItem.getTitle()) + ")";
             openMapsApp(Uri.parse(address));
         });
 
@@ -532,6 +538,15 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         if (lastKnownLocation != null) {
             centerOnUser();
         }
+
+        if ((BuildConfig.USE_ADVANCED_ROUTING && BuildConfig.INTERMEDIATE_STEPS > 25) ||
+                (!BuildConfig.USE_ADVANCED_ROUTING && BuildConfig.INTERMEDIATE_STEPS > 23)) {
+            Toast.makeText(this, getString(R.string.exceed_intermediates), Toast.LENGTH_SHORT).show();
+            local_intermediates = BuildConfig.USE_ADVANCED_ROUTING ? 25 : 23;
+        } else {
+            local_intermediates = BuildConfig.INTERMEDIATE_STEPS;
+        }
+
         mMap.setOnMapClickListener(latLng -> {
             if (routeMenu.getVisibility() == View.VISIBLE || layersMenu.getVisibility() == View.VISIBLE) {
                 clearMenus("");
@@ -543,7 +558,15 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             searchView.clearFocus();
         });
 
-        clusterManager = new ClusterManager<>(this, mMap);
+        clusterManager = new ClusterManager<>(this, mMap) {
+            @Override
+            public boolean onMarkerClick(Marker marker) {
+                if (waypointList.contains(marker)) {
+                    return true;        // waypoint markers are not interactive
+                }
+                return super.onMarkerClick(marker);
+            }
+        };
         customRenderer = new CustomClusterRenderer(this, mMap, clusterManager);
         clusterManager.setRenderer(customRenderer);
 
@@ -566,15 +589,23 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         clusterManager.getMarkerCollection().setOnInfoWindowClickListener(marker -> {
             Log.i(TAG, "triggered onInfoWindowClick");
             if (locationPermissionGranted) {
-                LatLng markerPosition = marker.getPosition();
-                String url = BranchDirectoryMap.DIR_URL + markerPosition.latitude + "," + markerPosition.longitude;
-                if (!routeMarkers.isEmpty()) {
-                    StringBuilder params = parameterCombiner(false);
+                String waypoints = currentItem.getWaypoints();
+                LatLng position;
+                if (!waypoints.isEmpty()) {
+                    position = currentItem.getPositions().get(waypoints.split(",")[waypoints.split(",").length - 1].trim());
+                } else {
+                    position = marker.getPosition();
+                }
+                StringBuilder url = new StringBuilder(BranchDirectoryMap.DIR_URL);
+                url.append(position.latitude).append(",").append(position.longitude);
+                if (!routeMarkers.isEmpty() || currentItem.getWaypoints().split(",").length > 1) {
+                    StringBuilder params = waypointCombiner("|", true);
                     if (params.length() > 0) {
-                        url += params;
+                        url.append(params);
                     }
                 }
-                openMapsApp(Uri.parse(url));
+                Log.i(TAG, "url: " + url);
+                openMapsApp(Uri.parse(url.toString()));
             }
         });
         clusterManager.setOnClusterClickListener(cluster -> {
@@ -610,9 +641,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         loadTextView.setVisibility(View.VISIBLE);
 
         varMapStr = getIntent().getStringExtra("places");
-        Gson gson = new Gson();
-        Type mapType = new TypeToken<ConcurrentHashMap<String, Map<String, Object>>>() {}.getType();
-        varMap = gson.fromJson(varMapStr, mapType);
+        varMap = gson.fromJson(varMapStr, BranchDirectoryMap.VARMAP_TYPE);
 //        Log.i(TAG, "varMap from places: " + varMap);
 
         task = new MapLoaderTask(this);
@@ -798,6 +827,10 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     }
 
     private void openMapsApp(Uri uri) {
+        if (intermediates_count > BranchDirectoryMap.MAX_INTERMEDIATES_EXT) {
+            Toast.makeText(this, getString(R.string.max_intermediates_ext), Toast.LENGTH_SHORT).show();
+            return;
+        }
         Intent intent = new Intent(Intent.ACTION_VIEW, uri);
         intent.setPackage("com.google.android.apps.maps");
         if (intent.resolveActivity(getPackageManager()) != null) {
@@ -896,37 +929,73 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
     }
 
-    private StringBuilder parameterCombiner(boolean avoidance) {
+    private StringBuilder waypointCombiner(String delimiter, boolean cutbody) {
+        // cutbody is for app calls to restrict all marker waypoints to last one
         StringBuilder waypointsBuilder = new StringBuilder();
         Iterator<String> keyIterator = routeMarkers.keySet().iterator();
+        // iterate through routeMarkers
         while (keyIterator.hasNext()) {
             String title = keyIterator.next();
-            if (waypointsBuilder.length() > 0) {
-                waypointsBuilder.append("|");
+            MyItem thisItem = (MyItem) routeMarkers.get(title).get(1);
+            // no waypoints
+            if (thisItem.getWaypoints().isEmpty()) {
+                Marker thisMarker = (Marker) routeMarkers.get(title).get(0);
+                if (!keyIterator.hasNext() && thisMarker.equals(currentMarker)) {
+                    Log.i(TAG, "last routeMarker is currentMarker");
+                    break;
+                }
+                if (waypointsBuilder.length() > 0) {
+                    waypointsBuilder.append(delimiter);
+                }
+                LatLng waypointPosition = thisMarker.getPosition();
+                waypointsBuilder.append(waypointPosition.latitude).append(",")
+                        .append(waypointPosition.longitude);
+            // waypoints exist
+            } else {
+                Iterator<String> waypointIterator;
+                if (cutbody) {
+                    String lastWaypoint = thisItem.getWaypoints().split(",")[thisItem.getWaypoints().split(",").length - 1];
+                    waypointIterator = Collections.singletonList(lastWaypoint).iterator();
+                } else {
+                    waypointIterator = Arrays.asList(thisItem.getWaypoints().split(",")).iterator();
+                }
+                while (waypointIterator.hasNext()) {
+                    String waypoint = waypointIterator.next();
+                    if (waypointsBuilder.length() > 0) {
+                        waypointsBuilder.append(delimiter);
+                    }
+                    // last waypoint treated as a stop
+                    if (waypointIterator.hasNext() && !cutbody) {
+                        waypointsBuilder.append("via:");
+                    }
+                    LatLng position = thisItem.getPositions().get(waypoint.trim());
+                    waypointsBuilder.append(position.latitude).append(",")
+                            .append(position.longitude);
+                }
             }
-            Marker thisMarker = (Marker) routeMarkers.get(title).get(0);
-            if (!keyIterator.hasNext() && thisMarker.equals(currentMarker)) {
-                Log.i(TAG, "last routeMarker is currentMarker");
-                break;
+        }
+        // iterate through currentItem waypoints excluding last one which is destination
+        if (!currentItem.getWaypoints().isEmpty()) {
+            List<String> waypoints = new ArrayList<>(Arrays.asList(currentItem.getWaypoints().split(",")));
+            if (cutbody) {
+                waypoints.subList(0, waypoints.size() - 1).clear();
             }
-            LatLng waypointPosition = thisMarker.getPosition();
-            waypointsBuilder.append(waypointPosition.latitude).append(",")
-                    .append(waypointPosition.longitude);
+            if (!waypoints.isEmpty()) {
+                waypoints.remove(waypoints.size() - 1);
+            }
+            for (String waypoint : waypoints) {
+                if (waypointsBuilder.length() > 0) {
+                    waypointsBuilder.append("|");
+                }
+                LatLng position = currentItem.getPositions().get(waypoint.trim());
+                waypointsBuilder.append("via:").append(position.latitude).append(",")
+                        .append(position.longitude);
+            }
         }
         if (waypointsBuilder.length() > 0) {
-            waypointsBuilder.insert(0, "&waypoints=");
+            waypointsBuilder.insert(0,"&waypoints=");
         }
-        StringBuilder avoidOptions = new StringBuilder();
-        if (avoidance) {
-            if (!isTollsEnabled) avoidOptions.append("tolls|");
-            if (!isHighwaysEnabled) avoidOptions.append("highways|");
-            if (!isFerriesEnabled) avoidOptions.append("ferries|");
-            if (avoidOptions.length() > 0) {
-                avoidOptions.insert(0, "&avoid=");
-                avoidOptions.setLength(avoidOptions.length() - 1);
-            }
-        }
-        return waypointsBuilder.append(avoidOptions);
+        return waypointsBuilder;
     }
 
     private void getCurrentLocation(LocationUpdateAction callback) {
@@ -989,6 +1058,17 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             removeMarkerButton.setVisibility(View.GONE);
         }
         if (locationPermissionGranted) {
+            if (!currentItem.getWaypoints().isEmpty()) {
+                for (String waypoint : currentItem.getPositions().keySet()) {
+//                    Log.i(TAG, "waypoint: " + waypoint);
+//                    Log.i(TAG, "name: " + currentItem.getTitle());
+//                    Log.i(TAG, "getWaypoints: " + currentItem.getWaypoints());
+//                    Log.i(TAG, "getPositions: " + currentItem.getPositions());
+                    Marker pos = mMap.addMarker(new MarkerOptions().position(currentItem.getPositions().get(waypoint))
+                            .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ROSE)));
+                    waypointList.add(pos);
+                }
+            }
             getCurrentLocation(this::GetInformationTaskCreator);
         } else {
             addMarkerButton.setVisibility(View.GONE);
@@ -1016,11 +1096,19 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     public void addMarkerToRoute() {
         Log.i(TAG, "addMarkerToRoute");
-        if (routeMarkers.size() < BuildConfig.INTERMEDIATE_STEPS) {
+        if (routeMarkers.size() < local_intermediates && intermediates_count < local_intermediates) {
             routeMarkers.put(currentMarker.getTitle(), new ArrayList<>());
             routeMarkers.get(currentMarker.getTitle()).add(currentMarker);
             routeMarkers.get(currentMarker.getTitle()).add(currentItem);
-            routeMarkers.get(currentMarker.getTitle()).add(new LatLng(currentMarker.getPosition().latitude, currentMarker.getPosition().longitude));
+            if (currentItem.getWaypoints().isEmpty()) {
+                routeMarkers.get(currentMarker.getTitle()).add(new LatLng(currentMarker.getPosition().latitude, currentMarker.getPosition().longitude));
+                intermediates_count++;
+            } else {
+                for (String waypoint : currentItem.getWaypoints().split(",")) {
+                    routeMarkers.get(currentMarker.getTitle()).add(currentItem.getPositions().get(waypoint.trim()));
+                    intermediates_count++;
+                }
+            }
             currentItem.setSelected(0);
             lastSelected = true;
             addMarkerButton.setVisibility(View.GONE);
@@ -1036,6 +1124,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     public void removeMarkerFromRoute() {
         Log.i(TAG, "removeMarkerFromRoute");
         routeMarkers.remove(currentMarker.getTitle());
+        intermediates_count--;
         currentItem.setSelected(-1);
         lastSelected = false;
         addMarkerButton.setVisibility(View.VISIBLE);
@@ -1118,6 +1207,12 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         if (currentMarker != null) {
             currentMarker.hideInfoWindow();
             currentMarker = null;
+            if (!waypointList.isEmpty()) {
+                for (Marker marker : waypointList) {
+                    marker.remove();
+                }
+                waypointList.clear();
+            }
         }
         markerButtonsLayout.setVisibility(View.GONE);
     }
@@ -1145,6 +1240,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             item.setSelected(-1);
         }
         routeMarkers.clear();
+        intermediates_count = 0;
         clearRouteButton.setVisibility(View.GONE);
         addMarkerButton.setVisibility(View.VISIBLE);
         removeMarkerButton.setVisibility(View.GONE);
@@ -1195,6 +1291,12 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             }
             tempMarker = currentMarker;
             currentMarker = null;
+            if (!waypointList.isEmpty()) {
+                for (Marker waypointMarker : waypointList) {
+                    waypointMarker.remove();
+                }
+                waypointList.clear();
+            }
             isInfoWindowOpen = false;
             customRenderer.setShouldCluster(true);
         }
@@ -1204,12 +1306,18 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private int getMapSize(Map<String, List<MyItem>> map) {
         int markersSize = 0;
         for (String table : tables) {
-//            Log.i(TAG, "markers in question: " + map.keySet().toString());
-//            Log.i(TAG, "table in question: " + table);
-//            Log.i(TAG, "table: " + table);
-//            Log.i(TAG, "markers.get: " + markers.keySet().toString());
             if (map.containsKey(table)) {
                 markersSize += map.get(table).size();
+            }
+        }
+        return markersSize;
+    }
+
+    private int getMapSize3D(Map<String, Map<String, Map<String, LatLng>>> map) {
+        int markersSize = 0;
+        for (String table : map.keySet()) {
+            for (String name : map.get(table).keySet()) {
+                markersSize += map.get(table).get(name).size();
             }
         }
         return markersSize;
@@ -1226,24 +1334,18 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     public static Map<String, Map<String, List<String>>> deepCopy3d(Map<String, Map<String, List<String>>> original) {
         Map<String, Map<String, List<String>>> copy = new HashMap<>();
-
         for (Map.Entry<String, Map<String, List<String>>> entry : original.entrySet()) {
             String outerKey = entry.getKey();
             Map<String, List<String>> innerMap = entry.getValue();
-
             Map<String, List<String>> innerMapCopy = new HashMap<>();
             for (Map.Entry<String, List<String>> innerEntry : innerMap.entrySet()) {
                 String innerKey = innerEntry.getKey();
                 List<String> list = innerEntry.getValue();
-
                 List<String> listCopy = new ArrayList<>(list);
-
                 innerMapCopy.put(innerKey, listCopy);
             }
-
             copy.put(outerKey, innerMapCopy);
         }
-
         return copy;
     }
 
@@ -1276,6 +1378,28 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 //                Log.i(TAG, "new outer array: " + outer.get(table).get("array"));
             } else {
                 Log.e(TAG, "WARNING: addToMap - outer table not found");
+            }
+        }
+    }
+
+    public void addToMapWaypoints(Map<String, Map<String, Object>> outer, Map<String, Map<String, Map<String, LatLng>>> inner) {
+        for (String reftable : inner.keySet()) {
+            if (outer.containsKey(reftable)) {
+                Map<String, Object> outerMap = outer.get(reftable);
+                Map<String, Map<String, LatLng>> innerMap = new HashMap<>();
+                for (String refname : inner.get(reftable).keySet()) {
+                    if (((ArrayList<String>) outer.get(reftable).get("array")).contains(refname)) {
+                        innerMap.put(refname, new HashMap<>());
+                        innerMap.get(refname).putAll(inner.get(reftable).get(refname));
+                    } else {
+                        Log.e(TAG, "WARNING: addToMapWaypoints - outer name not found: " + refname + " from table: " + reftable);
+                    }
+                }
+                outerMap.put("waypoints", innerMap);
+//                Log.i(TAG, "new outer: " + outer.get(reftable).get("waypoints"));
+//                Log.i(TAG, "outer array: " + outer.get(reftable).get("array"));
+            } else {
+                Log.e(TAG, "WARNING: addToMapWaypoints - outer table not found:" + reftable);
             }
         }
     }
@@ -1326,6 +1450,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         @Override
         protected void onClusterItemRendered(MyItem item, Marker marker) {
             clusterItemMarkerMap.get(currentTable).put(item, marker);
+            marker.setTag(item);
             super.onClusterItemRendered(item, marker);
         }
 
@@ -1359,6 +1484,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         private int latchCount = 0;
         private Map<String, Map<String, List<String>>> geocoderMaps = new HashMap<>();
         private Map<String, Map<String, List<String>>> missingMaps = new HashMap<>();
+        private Map<String, Map<String, List<String>>> waypointMaps = new HashMap<>();
+        private Map<String, Map<String, List<String>>> missingWaypointMaps = new HashMap<>();
+        private Map<String, Map<String, Map<String, LatLng>>> waypointValues = new HashMap<>();
         private final Gson gson = new Gson();
         private final LatLngTracker tracker = new LatLngTracker();
 
@@ -1378,27 +1506,17 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             if (sharedPreferences.contains(BranchDirectoryMap.KEY_LOAD_FINISHED)) {
                 Log.i(TAG, "KEY_LOAD_FINISHED: " + sharedPreferences.getBoolean(BranchDirectoryMap.KEY_LOAD_FINISHED, false));
             }
-//            if (!sharedPreferences.getBoolean(BranchDirectoryMap.KEY_LOAD_FINISHED, false)) {
-//                if (!sharedPreferences.getBoolean(BranchDirectoryMap.KEY_LOAD_FINISHED, false)) {
-//                    dbHelper.clearDatabase();
-//                }
-            Random random = new Random();
 
+            Random random = new Random();
             GeocodingService service = RetrofitClient.getClient(BranchDirectoryMap.BASE_URL).create(GeocodingService.class);
-//                ExecutorService executor = Executors.newSingleThreadExecutor();
+//            ExecutorService executor = Executors.newSingleThreadExecutor();
             ExecutorService executor = Executors.newFixedThreadPool(BuildConfig.MAX_THREADS);
 
-//                tables.add("ALL SETS");
-//                Log.i(TAG, "varMap keyset " + varMap.keySet().toString());
-//                for (String key : varMap.keySet()) {
-//                    for (String key2 : varMap.get(key).keySet()) {
-//                        Log.i(TAG, key + " key: " + key2 + " value: " + varMap.get(key).get(key2).toString());
-//                    }
-//                }
             if (varMap != null && !varMap.isEmpty()) {
                 Log.i(TAG, "varmap passed, reading");
                 for (String table : varMap.keySet()) {
                     Map<String, List<String>> geocoderMap = new HashMap<>();
+                    Map<String, List<String>> waypointMap = new HashMap<>();
                     ArrayList<String> place = (ArrayList<String>) varMap.get(table).get("array");
                     Log.i(TAG, "tablesSet: " + tablesSet);
                     Log.i(TAG, "table: " + table);
@@ -1410,7 +1528,14 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         if ((Boolean) varMap.get(table).get("use_refined")) {
                             // contains a plus code
                             if (place.get(i + 2).contains("+")) {
-                                geocoderMap.put(place.get(i), Arrays.asList(place.get(i + 2), place.get(i + 1), place.get(i + 2), place.get(i + 3), place.get(i + 4)));
+                                if (place.get(i + 2).contains(",")) {
+                                    String[] refined = place.get(i + 2).split(",");
+                                    geocoderMap.put(place.get(i), Arrays.asList(refined[refined.length - 1], place.get(i + 1), place.get(i + 2), place.get(i + 3), place.get(i + 4)));
+                                    waypointMap.put(place.get(i), Arrays.asList(refined).subList(0, refined.length - 1));
+                                    latchCount += refined.length - 1;
+                                } else {
+                                    geocoderMap.put(place.get(i), Arrays.asList(place.get(i + 2), place.get(i + 1), place.get(i + 2), place.get(i + 3), place.get(i + 4)));
+                                }
                             } else {
                                 // contains a refined address
                                 if (!place.get(i + 2).isEmpty()) {
@@ -1427,16 +1552,28 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         latchCount++;
                     }
                     geocoderMaps.put(table, geocoderMap);
+                    if (!waypointMap.isEmpty()) {
+                        waypointMaps.put(table, waypointMap);
+                    }
                 }
             }
             Log.i(TAG, "latchcount 1: " + latchCount);
 //            Log.i(TAG, "geocoderMaps: " + geocoderMaps.toString());
 
-            if (sharedPreferences.contains(BranchDirectoryMap.KEY_LOAD_ORDER)) {
-                Type mapType = new TypeToken<Map<String, Map<String, List<String>>>>() {}.getType();
-                missingMaps = gson.fromJson(sharedPreferences.getString(BranchDirectoryMap.KEY_LOAD_ORDER, ""), mapType);
+
+            Type mapType = new TypeToken<Map<String, Map<String, List<String>>>>() {}.getType();
+            if (sharedPreferences.contains(BranchDirectoryMap.KEY_LOAD_REDO)) {
+                missingMaps = gson.fromJson(sharedPreferences.getString(BranchDirectoryMap.KEY_LOAD_REDO, ""), mapType);
                 for (String table : missingMaps.keySet()) {
                     latchCount += missingMaps.get(table).size();
+                }
+            }
+            if (sharedPreferences.contains(BranchDirectoryMap.KEY_LOAD_REDO_WAYPOINT)) {
+                missingWaypointMaps = gson.fromJson(sharedPreferences.getString(BranchDirectoryMap.KEY_LOAD_REDO_WAYPOINT, ""), mapType);
+                for (String table : missingWaypointMaps.keySet()) {
+                    for (String name : missingWaypointMaps.get(table).keySet()) {
+                        latchCount += missingMaps.get(table).get(name).size();
+                    }
                 }
             }
 
@@ -1555,6 +1692,53 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     });
                 }
             }
+            if (mapHasInnerElements(missingWaypointMaps)) {
+                waypointMaps = deepCopy3d(missingWaypointMaps);
+                missingWaypointMaps.clear();
+                missingWaypointMaps = new HashMap<>();
+            }
+            if (!waypointMaps.isEmpty()) {
+                Log.i(TAG, "waypointMaps populated");
+                for (String table : waypointMaps.keySet()) {
+                    Map<String, List<String>> waypointMap = waypointMaps.get(table);
+                    waypointValues.put(table, new HashMap<>());
+                    missingWaypointMaps.put(table, new HashMap<>());
+                    for (String name : waypointMap.keySet()) {
+                        waypointValues.get(table).put(name, new HashMap<>());
+                        for (String pluscode : waypointMap.get(name)) {
+                            executor.submit(() -> {
+                                try {
+                                    service.getGeocode(pluscode, linkApiKey).enqueue(new Callback<>() {
+                                        @Override
+                                        public void onResponse(Call<GeocodingResponse> call, retrofit2.Response<GeocodingResponse> response) {
+                                            if (response.isSuccessful() && response.body() != null && !response.body().getResults().isEmpty()) {
+                                                GeocodingResponse.Result.Geometry.Location location = response.body().getResults().get(0).getGeometry().getLocation();
+                                                waypointValues.get(table).get(name).put(pluscode, new LatLng(location.getLat(), location.getLng()));
+                                                populateWaypoints(table, name, pluscode);
+                                            } else {
+                                                Log.i(TAG, "No results found for: " + name +", " + pluscode);
+                                                missingWaypointMaps.get(table).get(name).add(pluscode);
+                                            }
+                                            latch.countDown();
+                                        }
+
+                                        @Override
+                                        public void onFailure(Call<GeocodingResponse> call, Throwable t) {
+                                            Log.i(TAG, "Geocode request failed for: " + name +", " + pluscode, t);
+                                            missingWaypointMaps.get(table).get(name).add(pluscode);
+                                            latch.countDown();
+                                        }
+                                    });
+                                    long sleepTime = BuildConfig.BASE_DELAY_MS + random.nextInt(BuildConfig.RANDOM_DELAY_MS + 1);
+                                    TimeUnit.MILLISECONDS.sleep(sleepTime);
+                                } catch (InterruptedException e) {
+                                    Thread.currentThread().interrupt();
+                                }
+                            });
+                        }
+                    }
+                }
+            }
             executor.shutdown();
             try {
                 latch.await();
@@ -1565,16 +1749,17 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             linkApiKey = null;
             Log.i(TAG, "markers size: " + getMapSize(markers));
             Log.i(TAG, "latchCount: " + latchCount);
-//            Log.i(TAG, "varMap: " + varMap.toString());
             if (getMapSize(markers) > 0) {
-//                Log.i(TAG, "varmap before: " + varMap.toString());
                 addToMap(varMap, markers);
-//                Log.i(TAG, "varmap after: " + varMap.toString());
-//                Log.i(TAG, "markers: " + markers.toString());
-//                Log.i(TAG, "varMap after addToMap: " + varMap.toString());
+            }
+            if (getMapSize3D(waypointValues) > 0) {
+                addToMapWaypoints(varMap, waypointValues);
             }
             if (mapHasInnerElements(missingMaps)) {
                 Log.i(TAG, "missingMaps: " + missingMaps.toString());
+            }
+            if (mapHasInnerElements(missingWaypointMaps)) {
+                Log.i(TAG, "missingWaypointMaps: " + missingWaypointMaps.toString());
             }
 //            if (latchCount > getMapSize(markers)) {
 //                Log.i(TAG, "latchCount > getMapSize(markers), FIX THIS");
@@ -1600,9 +1785,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
                 String jsonString = gson.toJson(missingMaps);
 //                Log.i(TAG, "jsonString: " + jsonString);
-                editor.putString(BranchDirectoryMap.KEY_LOAD_ORDER, jsonString).apply();
+                editor.putString(BranchDirectoryMap.KEY_LOAD_REDO, jsonString).apply();
             } else {
-                editor.remove(BranchDirectoryMap.KEY_LOAD_ORDER);
+                editor.remove(BranchDirectoryMap.KEY_LOAD_REDO);
                 editor.putBoolean(BranchDirectoryMap.KEY_LOAD_FINISHED, true).apply();
             }
 
@@ -1694,10 +1879,17 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         private void populateMaps(String table, String name, String delim, double latitude, double longitude) {
 //            Log.i(TAG, "populateMaps: " + table + ", " + name + ", " + delim + ", " + latitude + ", " + longitude);
             Map<String, List<String>> geocoderMap = geocoderMaps.get(table);
+//            Log.i(TAG, "geocoderMap: " + geocoderMap);
             String nameCode = delim.isEmpty() ? "" : name.split(delim, 2)[0];
             String nameSnippet = "";
             if (name.split(delim, 2).length > 1) {
                 nameSnippet = delim.isEmpty() ? name : name.split(delim, 2)[1];
+            }
+//            Log.i(TAG, "get(2): " + geocoderMap.get(name).get(2));
+            String waypoints = geocoderMap.get(name).get(2).split("\\+").length > 2
+                    ? geocoderMap.get(name).get(2) : "";
+            if (!waypoints.isEmpty()) {
+                waypoints = waypoints.substring(0, waypoints.lastIndexOf(","));
             }
             ContentValues value = new ContentValues();
             value.put("latitude", latitude);
@@ -1706,11 +1898,37 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             value.put("name", nameSnippet);
             value.put("address", geocoderMap.get(name).get(1));
             value.put("refined", geocoderMap.get(name).get(2));
+            value.put("waypoints", waypoints);
+            value.put("positions", "");
             value.put("phone", geocoderMap.get(name).get(3));
             value.put("colour", geocoderMap.get(name).get(4));
             values.get(table).add(value);
             markers.get(table).add(new MyItem(latitude, longitude, nameCode, nameSnippet,
-                    geocoderMap.get(name).get(1), geocoderMap.get(name).get(2), geocoderMap.get(name).get(3), geocoderMap.get(name).get(4)));
+                    geocoderMap.get(name).get(1), geocoderMap.get(name).get(2), waypoints, geocoderMap.get(name).get(3), geocoderMap.get(name).get(4)));
+        }
+
+        private void populateWaypoints(String table, String name, String pluscode) {
+            List<ContentValues> cv = values.get(table);
+            for (ContentValues value : cv) {
+                if (value.containsKey("code") && value.containsKey("name")) {
+                    String vcode = value.getAsString("code");
+                    String vname = value.getAsString("name");
+                    String vtitle = vcode + (vcode.isEmpty() ? "" : vname.isEmpty() ? "" : " ") + (vname.isEmpty() ? "" : vname);
+                    if (vtitle.equals(name)) {
+                        value.put("positions", gson.toJson(waypointValues.get(table).get(name), BranchDirectoryMap.POSITIONS_TYPE));
+                        return;
+                    }
+                }
+            }
+            List<MyItem> items = markers.get(table);
+            for (MyItem item : items) {
+                if (item.getTitle().equals(name)) {
+                    item.setPositions(pluscode, waypointValues.get(table).get(name).get(pluscode));
+                    Log.i(TAG, "added waypoint to title: " + name + " positions: " + item.getPositions());
+                    return;
+                }
+            }
+            Log.e(TAG,"ERROR: populateWaypoints did not match: " + name + " in table: " + table);
         }
 
         public void updateEntry(String tableName, ContentValues values) {
@@ -1755,8 +1973,14 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         public GetInformationTask(Activity activity) {
             if (currentMarker != null) {
                 marker = currentMarker;
-                markerLat = marker.getPosition().latitude;
-                markerLng = marker.getPosition().longitude;
+                if (currentItem.getWaypoints().isEmpty()) {
+                    markerLat = marker.getPosition().latitude;
+                    markerLng = marker.getPosition().longitude;
+                } else {
+                    String lastWaypoint = currentItem.getWaypoints().split(",")[currentItem.getWaypoints().split(",").length - 1].trim();
+                    markerLat = currentItem.getPositions().get(lastWaypoint).latitude;
+                    markerLng = currentItem.getPositions().get(lastWaypoint).longitude;
+                }
             } else {
                 Log.e(TAG, "currentMarker is null, FIX THIS");
                 marker = null;
@@ -1787,13 +2011,14 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                             + "&destination=" + markerLat + "," + markerLng + "&key=" + linkApiKey);
                     linkApiKey = null;
 
-                    if (!routeMarkers.isEmpty()) {
+                    // add waypoints from route markers first then add waypoints from currentItem
+                    if (!routeMarkers.isEmpty() || currentItem.getWaypoints().split(",").length > 1) {
                         CountDownLatch latch = new CountDownLatch(1);
                         Activity activity = activityRef.get();
                         activity.runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
-                                StringBuilder params = parameterCombiner(true);
+                                StringBuilder params = waypointCombiner("|", false);
                                 if (params.length() > 0) {
                                     url.append(params);
                                 }
@@ -1806,6 +2031,16 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                             e.printStackTrace();    // FIX THIS: add logging
                         }
                     }
+
+                    StringBuilder avoidOptions = new StringBuilder();
+                    if (!isTollsEnabled) avoidOptions.append("tolls|");
+                    if (!isHighwaysEnabled) avoidOptions.append("highways|");
+                    if (!isFerriesEnabled) avoidOptions.append("ferries|");
+                    if (avoidOptions.length() > 0) {
+                        avoidOptions.insert(0, "&avoid=");
+                        avoidOptions.setLength(avoidOptions.length() - 1);
+                    }
+                    url.append(avoidOptions);
 
                     Log.i(TAG, "trafficMode: " + trafficMode);
 
@@ -1855,8 +2090,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                                         new ArrayList<>(Collections.singletonList(new ArrayList<>(Collections.singletonList(polyline)))),
                                         null};
                             } else {
-                                Log.e(TAG, "Error response: " + computeDirectionsJson.get("status").getAsString());
-                                Log.e(TAG, "Error response: " + computeDirectionsJson.get("error_message").getAsString());
+                                Log.e(TAG, "Error status: " + computeDirectionsJson.get("status").getAsString());
+                                Log.e(TAG, "Error message: " + computeDirectionsJson.get("error_message").getAsString());
                             }
                         }
                     } catch (IOException e) {
@@ -1881,25 +2116,86 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     destLocationObj.add("latLng", destLatLngObj);
                     destinationObj.add("location", destLocationObj);
                     root.add("destination", destinationObj);
+                    JsonArray intermediatesArray = new JsonArray();
 
                     if (!routeMarkers.isEmpty()) {
-                        JsonArray intermediatesArray = new JsonArray();
-                        for (String title : routeMarkers.keySet()) {
+                        Iterator<String> iterator = routeMarkers.keySet().iterator();
+                        while (iterator.hasNext()) {
+                            String title = iterator.next();
+                            MyItem item = (MyItem) routeMarkers.get(title).get(1);
+                            if (item.getWaypoints().isEmpty()) {
+                                Marker marker = (Marker) routeMarkers.get(title).get(0);
+                                if (!iterator.hasNext() && marker.equals(currentMarker)) {
+                                    Log.i(TAG, "adv route: last marker is currentMarker");
+                                    break;
+                                }
+                                JsonObject waypointObject = new JsonObject();
+                                JsonObject locationObject = new JsonObject();
+                                JsonObject latLngObject = new JsonObject();
+
+                                latLngObject.addProperty("latitude", ((LatLng) routeMarkers.get(title).get(2)).latitude);
+                                latLngObject.addProperty("longitude", ((LatLng) routeMarkers.get(title).get(2)).longitude);
+
+                                locationObject.add("latLng", latLngObject);
+                                waypointObject.add("location", locationObject);
+                                intermediatesArray.add(waypointObject);
+                            } else {
+                                Iterator<String> waypointIterator = Arrays.asList(item.getWaypoints().split(",")).iterator();
+                                while (waypointIterator.hasNext()) {
+                                    String waypoint = waypointIterator.next();
+                                    JsonObject waypointObject = new JsonObject();
+                                    JsonObject locationObject = new JsonObject();
+                                    JsonObject latLngObject = new JsonObject();
+
+                                    latLngObject.addProperty("latitude", item.getPositions().get(waypoint.trim()).latitude);
+                                    latLngObject.addProperty("longitude", item.getPositions().get(waypoint.trim()).longitude);
+
+                                    locationObject.add("latLng", latLngObject);
+                                    waypointObject.add("location", locationObject);
+
+                                    if (waypointIterator.hasNext()) {
+                                        waypointObject.addProperty("via", true);
+                                    }
+
+                                    intermediatesArray.add(waypointObject);
+                                }
+                            }
+                        }
+//                        for (String title : routeMarkers.keySet()) {
+//                            JsonObject waypointObject = new JsonObject();
+//                            JsonObject locationObject = new JsonObject();
+//                            JsonObject latLngObject = new JsonObject();
+//
+//                            latLngObject.addProperty("latitude", ((LatLng) routeMarkers.get(title).get(2)).latitude);
+//                            latLngObject.addProperty("longitude", ((LatLng) routeMarkers.get(title).get(2)).longitude);
+//
+//                            locationObject.add("latLng", latLngObject);
+//                            waypointObject.add("location", locationObject);
+//
+//                            // "via" is optional, via implies that the waypoint is not a stop
+////                            waypointObject.addProperty("via", true);
+//
+//                            intermediatesArray.add(waypointObject);
+//                        }
+                    }
+                    if (!currentItem.getWaypoints().isEmpty()) {
+                        String[] waypoints = currentItem.getWaypoints().split(",");
+                        for (String waypoint : Arrays.copyOfRange(waypoints, 0, waypoints.length - 1)) {
                             JsonObject waypointObject = new JsonObject();
                             JsonObject locationObject = new JsonObject();
                             JsonObject latLngObject = new JsonObject();
 
-                            latLngObject.addProperty("latitude", ((LatLng) routeMarkers.get(title).get(2)).latitude);
-                            latLngObject.addProperty("longitude", ((LatLng) routeMarkers.get(title).get(2)).longitude);
+                            latLngObject.addProperty("latitude", currentItem.getPositions().get(waypoint.trim()).latitude);
+                            latLngObject.addProperty("longitude", currentItem.getPositions().get(waypoint.trim()).longitude);
 
                             locationObject.add("latLng", latLngObject);
                             waypointObject.add("location", locationObject);
-
-                            // "via" is optional, via implies that the waypoint is not a stop
-//                            waypointObject.addProperty("via", true);
+                            waypointObject.addProperty("via", true);
 
                             intermediatesArray.add(waypointObject);
                         }
+                    }
+                    if (!intermediatesArray.isEmpty()) {
                         root.add("intermediates", intermediatesArray);
                     }
 
@@ -2058,8 +2354,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     customAdapter.setTrafficText(oldTrafficText);
                 }
             }
-//            Log.i(TAG, "old size: " + oldPolyline.size());
-//            Log.i(TAG, "encoded size: " + encodedPolyline.size());
             Log.i(TAG, "lastSelected: " + lastSelected);
             customAdapter.setInfoText(distance + " | " + duration + " | " + arrival);
             customRenderer.setShouldCluster(false);

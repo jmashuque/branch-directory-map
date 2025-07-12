@@ -1,4 +1,4 @@
-# Branch Directory Map
+# ![](screenshots/ic_launcher.png) Branch Directory Map
 
 This project and associated README file are under active development and may change at any time. Please consider watching this repository if you're interested in tracking its progress.
 
@@ -11,18 +11,23 @@ This project and associated README file are under active development and may cha
 - [Installation](#installation)
 - [adbc.bat](#adbcbat)
 - [Roadmap](#roadmap)
+- [Accuracy](#accuracy)
 - [Security](#security)
 - [Data Collection](#data-collection)
+- [Known Issues](#known-issues)
 - [Changelog](#changelog)
 
 ## Overview
 
 Branch Directory Map is my latest Android app, coded mostly in Java using Android Studio. This app primarily uses the Google Maps SDK for Android and various Google API's. Basically it reads CSV files (converted from XLSX files or other sources) and then parses this data to create an SQLite database, and then contacts Google Maps Geocoding API to get latitude/longitude positions and stores them for future retrieval in the database. Users can see all the valid locations or branches on a Google Map fragment, with custom coloured markers for each CSV file read. Users are able to search for branches based on branch codes or names or addresses, and get information about that branch like distance and ETA, as well as traffic information and a polyline projected on the map to show the optimal route to take. Users can also call branches that have listed phone numbers. There is also a routing feature that lets users add multiple branches to a route and use the Google Maps app for Android to navigate to all the branches on the route, as well as show all information for the whole route. This app is in an alpha status currently, so commercial usage isn't advised just yet, although my ultimate goal is to make this app usable by any company who needs a mapped branch directory for driver navigation. I am a driver for one of the largest rental car companies in the world and I developed this app to help myself and my coworkers navigate between the hundreds of branches and dealerships we deal with, and it has been popular among Android-user drivers. An iOS version is planned in the future once I learn Flutter.
 
+With the current Essentials tier, Google is surprisingly generous with 10,000 free calls per API for all non-Pro/Enterprise level Google Maps Platform API's. Refer here for Google's latest tier-based pricing and limits: [Platform Pricing & API Costs](https://cloud.google.com/maps-platform/pricing)
+
 ## Features
 
-- use either Directions API for simple routing or advanced routing features using Routes API
-- add to up to 25 intermediate branches within one route using waypoints
+- use either Directions API for simple routing or Advanced Routing features using Routes API
+- add up to 23 (or 25 if using Advanced Routing) intermediate branches within one route using waypoints
+- pre-code waypoints for markers using comma separated plus codes in the refined address field, useful for routing to markers whose approaching road is incorrectly chosen by Google
 - CSV or DB files can either be hard-coded with the app or read from a file by the user using `ActivityResultContracts.GetContent()`
 - geocode using either just address, or address + postal code, or Google plus codes (if detected), and optionally add a custom modifier to all addresses
 - ability to bundle DB files with release with pre-geocoded markers so users don't need to geocode (very costly for hundreds of markers per user)
@@ -35,17 +40,23 @@ Branch Directory Map is my latest Android app, coded mostly in Java using Androi
 
 ## Gallery
 
-Coming soon.
+<p align="center">
+    <img src="screenshots/Screenshot_20250712_140641.png" alt="" width="160" style="margin-right: 10px;" />
+    <img src="screenshots/Screenshot_20250712_140807.png" alt="" width="160" style="margin-right: 10px;" />
+    <img src="screenshots/Screenshot_20250712_140901.png" alt="" width="160" style="margin-right: 10px;" />
+    <img src="screenshots/Screenshot_20250712_140951.png" alt="" width="160" style="margin-right: 10px;" />
+    <img src="screenshots/Screenshot_20250712_141142.png" alt="" width="160" />
+</p>
 
 ## Requirements
 
 - Android Studio 2024 or later
 - Android 6.0 Marshmallow (API 23) or later required (to use `EncryptedSharedPreferences`)
-- Google Cloud account (free to make, requires valid credit card, must create a new project, $100 USD credit per month for non-commercial use)
+- Google Cloud account (free to make, requires valid credit card, must create a new project)
 - two Google API keys: one secure and restricted to only Android, the app's package name plus SHA-1, and the Maps SDK for Android API; the other insecure and restricted to Google Directions/Geocoding/Routes API's
 - to protect insecure API key: either a Firebase account (must create a new project to not link with Google Cloud) with Remote Config, or Java NDK for C++ obfuscation
 - file called `api.dat` (included in `.gitignore`) in your root project folder with the app API key on the first line, and if using NDK then the requests API key on the second line, this file should not be bundled with a build or committed to a repository
-- if using Firebase Remote Config, get the `google-services.json` from Firebase and place it in your `app\src` folder, and create a new Remote Config parameter called `geocode_api_key` with the value of the requests API key
+- if using Firebase Remote Config, get the `google-services.json` file from Firebase and place it in your `app\src` folder, and create a new Remote Config parameter called `geocode_api_key` with the value of the requests API key
 - RootBeer (optional, from Maven Central, doesn't require additional setup)
 
 ## Installation
@@ -54,17 +65,29 @@ Detailed instructions coming soon. For now just clone the repository, unzip it, 
 
 ## adbc.bat
 
-I have included a helper batch file `create_adbc.bat` which creates my little adb companion (adbc), which is a simple script to run adb/adb emu/gradlew commands from terminal in Android Studio, including pre-programmed commands. Open a new terminal window and run the following command:
+I have included a helper batch file `create_adbc.bat` which creates my little adb companion (adbc), a simple script to run adb/adb emu/gradlew commands from terminal in Android Studio, including pre-programmed commands. Open a new terminal window and run the following command:
 ```
 .\create_adbc "<adb directory>" <device IP address> <optional port number>
 ```
-Replace the <> values with the appropriate parameters, preserving the double quotes. This will create a file called 'adbc.bat' in the same folder. By default, since API 31, Android randomizes the port number for tcp/ip every time wireless debugging starts. This little script will force port 5555, or your specified optional port, through adb. But this setting will reset every time you restart your device. To change port to 5555, run the following command:
+Replace the <> values with the appropriate parameters, preserving the double quotes. This will create a file called 'adbc.bat' in the same folder. If your device isn't paired with adb yet, enable wireless debugging on the device, select the Pairing Code option, make note of the debugging port and the 6-digit pairing code, and run the following command:
+```
+.\adbc pair <debugging port> <pairing code>
+```
+After a few seconds it should say the pairing was successful. By default, since API 31, Android randomizes the port number for tcp/ip every time wireless debugging starts. This little script will force port 5555, or your specified optional port, through adb. But this setting will reset every time you restart your device. To change port to 5555, or the optional port you specified earlier, run the following command:
 ```
 .\adbc <device port>
 ```
-Provide the proper wireless debugging port number. `adbc.bat` will change the port number and reconnect. From then on, until your device restarts, you can use `.\adbc` to reconnect from within Android Studio on the default port 5555, or your optional port, even if wireless debugging isn't explicitly enabled on the device. After a restart, just provide the port number again. To disconnect from the device, run the following command:
+Provide the proper port number from the wireless debugging settings on your device, it should be 5 digits. `adbc.bat` will change the port number and reconnect. From then on, until your device restarts, you can just call `.\adbc` to reconnect from within Android Studio on the default port 5555, or your optional port, even if wireless debugging isn't explicitly enabled on the device. After a restart, just provide the wireless debugging port number again. To disconnect from the device, run the following command:
 ```
-.\adbc dscn
+.\adbc disc
+```
+The `adbc.bat` port configuring function does not work when multiple devices/emulators are detected by adb. To list all connected devices, run the following command:
+```
+.\adbc list
+```
+By default the latest versions of adb will use mDNS discovery to auto connect to previously paired devices even if they're connected to already, sometimes causing duplicate entries in Android Studio. To toggle this behaviour, use the following command:
+```
+.\adbc auto <on/off>
 ```
 To directly pass arguments to adb use the following command:
 ```
@@ -74,7 +97,7 @@ You can run the following command to mitigate issues with gradle daemon taking u
 ```
 .\adbc stop
 ```
-This calls the gradle wrapper to stop the gradle daemon (OpenJDK Platform binary) process, it will automatically restart when you sync/clean/build. To run other gradlew commands use the following command:
+This calls the gradle wrapper (gradlew) to stop the gradle daemon (OpenJDK Platform binary) process, it will automatically restart when you sync/clean/build. To run other gradlew commands use the following command:
 ```
 .\adbc -ga <arguments>
 ```
@@ -93,7 +116,7 @@ This batch file, and the `create_adbc.bat` file, require that you run it from yo
 - ability to convert XLSX files to CSV in the app
 - localization support for languages and RTL interface as well as different address formatting
 - further fields in the database also parsed from the CSV, including notes, hours of operation, manager, etc.
-- ability to track users from Firebase for authentication, as well as voluntary user location reporting
+- ability to track users from Firebase for authentication
 - selecting a marker more than once for a route
 - developer mode to separate file reading and geocoding from release going to drivers
 - unit testing and release configuration including key signing
@@ -105,8 +128,14 @@ This batch file, and the `create_adbc.bat` file, require that you run it from yo
 - possible hidden debug menu for easy developer access to functions and being able to override build parameters
 - maybe Firebase App Check if I ever figure out how to implement it without Play Integrity
 - favourites and history function in the SearchView
+- ability for users to broadcast location, send information to other users, and report road hazards to all users
 - consent/EULA/privacy policy/terms and conditions template and activity for end-users
 - route optimization feature using Traveling Salesman algorithm for routes with multiple waypoints
+- exceed the 23/25 waypoints hard limit by cutting extended routes into segments
+
+## Accuracy
+
+The accuracy of the markers and the routing features of this app is entirely dependent on Google's current map data, which is constantly changing. Please use plus codes in the refined address field to ensure accuracy. Plus codes are Google's proprietary system of alphanumerically coded latitude/longitude coordinates, see [here](https://plus.codes/map) for more information. For addresses whose approach road/entry point is incorrectly calculated by Google, such as branches within large lots that are not navigable according to Google, you may provide multiple plus codes in the refined field, separated by commas. The last plus code is assumed to be the entrance to the branch and will not be routed to, all other plus codes will be considered waypoints in sequence from first to last.
 
 ## Security
 
@@ -114,14 +143,18 @@ Due to how Google allows usage of its API keys, this app utilizes two API keys. 
 
 ## Data Collection
 
-This app utilizes many Google services including Maps SDK for Android, various Maps API's, Firebase including Remote Config, Cloud, as well as Play Services. All of this implies various forms of data collection that I have no control over. I personally do not have access to any of this data, but the Cloud Billing account holder(s) may access some of this data. You as a developer or employer are responsible for informing your end-users about this data collection in accordance with your local laws.
+This app utilizes many Google services including Maps SDK for Android, various Maps Platform API's, Firebase including Remote Config, Cloud, as well as Play Services. All of this implies various forms of data collection for who knows what purposes, that you nor I have any control over. Such is the price of using Google products. The Cloud Billing account holder(s), most likely you, may access some of this data. You as a developer or employer are responsible for informing your end-users about this data collection in accordance with your local laws.
+
+## Known Issues
+
+Being a pre-release app, there are some known issues. Most notably your logcat will be flooded with `Too many Flogger logs received before configuration. Dropping old logs.` messages. This error is directly related to the Maps SDK and I have been unable to resolve it. This project doesn't utilize Flogger or Compose, so it seems to be on Google's end. For now you can safely ignore this error or suppress the message on logcat.
 
 ## Changelog
 
 ### 0.1-beta1 (upcoming)
 - upcoming: loading screen activity or progress bar for geocoding segment
 - upcoming: marker icons will render with a letter to show position if on the route
-- upcoming: ability to display all marker tables together
+- upcoming: ability to display all marker tables together, amd route to a marker more than once
 - upcoming: revised database scheme to help geocode better including mandatory full-format postal codes and separate plus codes
 - upcoming: proxy option which will disable implementing Firebase Remote Config and `EncryptedSharedPreferences`
 - upcoming: option for automatic route optimization using Traveling Salesman algorithm
@@ -133,6 +166,19 @@ This app utilizes many Google services including Maps SDK for Android, various M
 - upcoming: overlay buttons on marker info windows to favourite, refresh, or close the marker
 - upcoming: automatic refreshing when marker info windows are open for a specified amount of time
 - upcoming: theme colour changes for better contrast in both light and dark device themes
+- upcoming: visual waypoint counter displayed on the map fragment when relevant
+
+### 0.1-beta1-preview (2025-07-12)
+- feature: refined address fields can include multiple plus codes separated by commas, treated as "via" waypoints, refer to [Accuracy](#accuracy) for more information
+- improved: changes to `create_adbc.bat` and `adbc.bat` to check argument formatting, resolve project directory paths with spaces, new `pair`, `list`, and `auto` commands, and other tweaks
+- improved: root checks now performed every time API key is accessed
+- improved: branch code and name can now be read from separate fields or one field
+- revised: Address and Refined fields can contain commas
+- revised: `libs.versions.toml` updated, including AGP version
+- revised: removed unused dependencies, including all of Jetpack Compose, and fragmented comments
+- revised: number of waypoints tracked so as to not exceed 23 (or 25 fpr Advanced Routing), hard limits set by Google
+- fix: avoidance options now passed to API's even without selecting waypoints
+- fix: for now, waypoints are truncated to the last one for routes sent to Maps App due to Google's 10 intermediates limit and inability to route through waypoints as "via" in the Maps App
 
 ### 0.1-alpha4 (2025-04-06)
 - feature: specify a Google Map ID to import your custom map style from your cloud project, will disable dark and monochrome toggles, pricing will be higher per map load

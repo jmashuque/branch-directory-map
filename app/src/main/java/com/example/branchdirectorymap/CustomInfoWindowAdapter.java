@@ -46,7 +46,12 @@ public class CustomInfoWindowAdapter implements GoogleMap.InfoWindowAdapter {
         }
 
         titleTextView.setText(marker.getTitle());
-        snippetTextView.setText(marker.getSnippet());
+        String snippet = marker.getSnippet();
+        if (marker.getTag() instanceof MyItem) {
+            String refined = ((MyItem) marker.getTag()).getRefined();
+            snippet = snippet.concat(refined.isEmpty() || refined.contains("+") ? "" : ", " + refined);
+        }
+        snippetTextView.setText(snippet);
         infoTextView.setText(infoText);
         trafficTextView.setText(trafficText);
 

@@ -87,13 +87,10 @@ public class FileSelectionActivity extends AppCompatActivity {
                                 fileName = returnCursor.getString(index);
                                 returnCursor.close();
                             }
-//                            fileExt = MimeTypeMap.getSingleton().getExtensionFromMimeType(contentResolver.getType(uri));
                         } else {
                             Log.i(TAG, "---Unknown scheme: not programmed---");
                             finish();
                         }
-//                        fileName = fileName.substring(fileName.lastIndexOf("/") == -1 ? 0 : fileName.lastIndexOf("/") + 1);
-//                        fileName = fileName.substring(0, fileName.contains(".") ? fileName.lastIndexOf(".") : fileName.length());
                         fileExt = fileName.substring(fileName.lastIndexOf(".") + 1);
                         Log.i(TAG, "fileName Extracted: " + fileName);
                         Log.i(TAG, "fileExt Extracted: " + fileExt);
@@ -107,7 +104,7 @@ public class FileSelectionActivity extends AppCompatActivity {
                                 throw new IOException();
                             }
                         } else {
-                            Log.i(TAG, "Type Error");
+                            Log.i(TAG, "---Type Error--- extension:" + fileExt);
                             textView.setText(R.string.type_warn);
                         }
                         parseArray(entries);
@@ -197,6 +194,7 @@ public class FileSelectionActivity extends AppCompatActivity {
                 entries.add(entry.trim());
             }
             Log.i(TAG, "len: " + entries.size());
+            Log.i(TAG, "used: " + (BuildConfig.SETTINGS_PER_FILE ? entries.size() : 1));
             prepMaps(BuildConfig.SETTINGS_PER_FILE ? entries.size() : 1, entries);
             for (String entry : entries) {
                 try {
@@ -224,6 +222,7 @@ public class FileSelectionActivity extends AppCompatActivity {
         Map<String, Object> entryMap;
         for (int i = 0; i < len; i++) {
             if (entries.get(i).isEmpty()) {
+                Log.i(TAG, "empty entry");
                 continue;
             }
             entryMap = new HashMap<>();
@@ -239,6 +238,14 @@ public class FileSelectionActivity extends AppCompatActivity {
                 entryMap.put("use_phone", Boolean.parseBoolean(BuildConfig.USE_PHONE.split(",")[i].trim()));
 //                Log.i(TAG, "use_refined: " + Boolean.parseBoolean(BuildConfig.USE_REFINED.split(",")[i].trim()));
                 entryMap.put("use_refined", Boolean.parseBoolean(BuildConfig.USE_REFINED.split(",")[i].trim()));
+//                Log.i(TAG, "title_split: " + Boolean.parseBoolean(BuildConfig.TITLE_SPLIT.split(",")[i].trim()));
+                entryMap.put("title_split", Boolean.parseBoolean(BuildConfig.TITLE_SPLIT.split(",")[i].trim()));
+                if (entryMap.get("title_split") != null && (Boolean) entryMap.get("title_split")) {
+//                    Log.i(TAG, "title_2_index: " + Integer.parseInt(BuildConfig.TITLE_2_INDEX.split(",")[i].trim()));
+                    entryMap.put("title_2_index", Integer.parseInt(BuildConfig.TITLE_2_INDEX.split(",")[i].trim()));
+//                    Log.i(TAG, "title_2_offset: " + Integer.parseInt(BuildConfig.TITLE_2_OFFSET.split(",")[i].trim()));
+                    entryMap.put("title_2_offset", Integer.parseInt(BuildConfig.TITLE_2_OFFSET.split(",")[i].trim()));
+                }
                 // regex splits based on commas but only when not surrounded by double quotes
                 // this allows for values with commas to be preserved
                 String geoReg = BuildConfig.GEOCODE_REGION.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)")[i].trim().replace("\"", "");
@@ -277,6 +284,7 @@ public class FileSelectionActivity extends AppCompatActivity {
             } catch (IndexOutOfBoundsException e) {
                 Log.i(TAG, "---IndexOutOfBoundsException--- check each array's length matches number of file names");
             }
+            Log.i(TAG, "reached");
             varMap.put(tableName, entryMap);
         }
     }
@@ -310,8 +318,18 @@ public class FileSelectionActivity extends AppCompatActivity {
             }
             Log.i(TAG, "parseArray entry: " + entry);
             Log.i(TAG, "entries: " + entryPre.get(entry).size());
+            int ignoreRowsBegin = (int) varMap.get(entry).get("ignore_rows_begin");
+            int ignoreRowsEnd = (int) varMap.get(entry).get("ignore_rows_end");
+            int titleIndex = (int) varMap.get(entry).get("title_index");
+            int addressIndex = (int) varMap.get(entry).get("address_index");
+            int refinedAddressIndex = (int) varMap.get(entry).get("refined_address_index");
+            int phoneIndex = (int) varMap.get(entry).get("phone_index");
             int rowsPerSet, titleOffset, addressOffset, refinedAddressOffset, phoneOffset;
-            if (!(Boolean) varMap.get(entry).get("multi_row_sets")) {
+            int title2Index = -1;
+            int title2Offset = -1;
+            boolean multiRowSets = (Boolean) varMap.get(entry).get("multi_row_sets");
+            boolean titleSplit = (Boolean) varMap.get(entry).get("title_split");
+            if (!multiRowSets) {
                 rowsPerSet = 1;
                 titleOffset = addressOffset = refinedAddressOffset = phoneOffset = 0;
             } else {
@@ -321,22 +339,31 @@ public class FileSelectionActivity extends AppCompatActivity {
                 refinedAddressOffset = (int) varMap.get(entry).get("refined_address_offset");
                 phoneOffset = (int) varMap.get(entry).get("phone_offset");
             }
-            Log.i(TAG, "entry: " + entry + " rowsPerSet: " + rowsPerSet + " titleOffset: " + titleOffset + " addressOffset: " + addressOffset + " refinedAddressOffset: " + refinedAddressOffset + " phoneOffset: " + phoneOffset);
-            Log.i(TAG, "ignore_rows_begin: " + varMap.get(entry).get("ignore_rows_begin") + " ignore_rows_end: " + varMap.get(entry).get("ignore_rows_end"));
-            for (int i = (int) varMap.get(entry).get("ignore_rows_begin"); i < entryPre.get(entry).size()-(int) varMap.get(entry).get("ignore_rows_end"); i += rowsPerSet) {
+            if (titleSplit) {
+                title2Index = (int) varMap.get(entry).get("title_2_index");
+                title2Offset = multiRowSets ? (int) varMap.get(entry).get("title_2_offset") : 0;
+            }
+//            Log.i(TAG, "entry: " + entry + " rowsPerSet: " + rowsPerSet + " titleOffset: " + titleOffset + " addressOffset: " + addressOffset + " refinedAddressOffset: " + refinedAddressOffset + " phoneOffset: " + phoneOffset);
+            for (int i = ignoreRowsBegin; i < entryPre.get(entry).size() - ignoreRowsEnd; i += rowsPerSet) {
                 ArrayList<String> entryPost = new ArrayList<>();
                 // add full name and address, stripping leading and trailing double quotes
-                entryPost.add(stripQuotesToArray(entryPre.get(entry).get(i + titleOffset)).get((int) varMap.get(entry).get("title_index")));
-                entryPost.add(stripQuotesToArray(entryPre.get(entry).get(i + addressOffset)).get((int) varMap.get(entry).get("address_index")));
+                if (titleSplit) {
+                    entryPost.add(stripQuotesToArray(entryPre.get(entry).get(i + titleOffset)).get(title2Index)
+                            + varMap.get(entry).get("delimiter")
+                            + stripQuotesToArray(entryPre.get(entry).get(i + title2Offset)).get(titleIndex));
+                } else {
+                    entryPost.add(stripQuotesToArray(entryPre.get(entry).get(i + titleOffset)).get(titleIndex));
+                }
+                entryPost.add(stripQuotesToArray(entryPre.get(entry).get(i + addressOffset)).get(addressIndex));
                 // add refined
                 if ((Boolean) varMap.get(entry).get("use_refined")) {
-                    entryPost.add(new ArrayList<>(Arrays.asList(entryPre.get(entry).get(i + refinedAddressOffset))).get((int) varMap.get(entry).get("refined_address_index")));
+                    entryPost.add(new ArrayList<>(Arrays.asList(entryPre.get(entry).get(i + refinedAddressOffset))).get(refinedAddressIndex));
                 } else {
                     entryPost.add("");
                 }
                 // add phone
                 if ((Boolean) varMap.get(entry).get("use_phone")) {
-                    entryPost.add(new ArrayList<>(Arrays.asList(entryPre.get(entry).get(i + phoneOffset))).get((int) varMap.get(entry).get("phone_index")));
+                    entryPost.add(new ArrayList<>(Arrays.asList(entryPre.get(entry).get(i + phoneOffset))).get(phoneIndex));
                 } else {
                     entryPost.add("");
                 }
@@ -365,14 +392,10 @@ public class FileSelectionActivity extends AppCompatActivity {
 
     private void callMap() {
         Log.i(TAG, "callMap");
-//        Log.i(TAG, "varMap 1st: " + varMap.toString());
         for (String key : varMap.keySet()) {        // remove extension from keys
             varMap.put(key.substring(0, key.contains(".") ? key.lastIndexOf(".") : key.length()), varMap.remove(key));
         }
-//        List<String> keys = new ArrayList<>(varMap.keySet());
-//        Collections.sort(keys);
         if (!BuildConfig.EMBEDDED_FILE) {
-//            Log.i(TAG, "case3");
             showDialog();
         } else {
             Log.i(TAG, "embedded db conf loaded, will override");
@@ -407,17 +430,7 @@ public class FileSelectionActivity extends AppCompatActivity {
     }
 
     public void callNextActivity() {
-//        Log.i(TAG, "case4");
-//        for (String key : varMap.keySet()) {
-//            for (String key2 : varMap.get(key).keySet()) {
-//                Log.i(TAG, key + " key: " + key2 + " value: " + varMap.get(key).get(key2).toString());
-//            }
-//        }
-//        for (String key : varMap.keySet()) {
-//            Log.i(TAG, key + " array: " + varMap.get(key).get("array"));
-//        }
         Intent i = new Intent(this, MapsActivity.class);
-//        Log.i(TAG, "varMap before map activity: " + varMap.toString());
         String serializedData = gson.toJson(varMap);
         i.putExtra("places", serializedData);
         Log.i(TAG, "starting map activity");

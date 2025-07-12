@@ -2,37 +2,68 @@ package com.example.branchdirectorymap;
 
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import com.google.maps.android.clustering.ClusterItem;
 
+import java.lang.reflect.Type;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class MyItem implements ClusterItem, Parcelable {
+
+    private static final String TAG = "SYS-MYITEM";
     private final LatLng position;  // latitude and longitude, derived from address or refined
     private final String code;      // location code, derived from full name
     private final String name;      // location name, derived from full name
     private final String snippet;   // location address
     private final String refined;   // refined address
+    private String waypoints;   // optional waypoints
+    private Map<String, LatLng> positions;    // LatLngs for optional waypoints
     private final String phone;     // phone number
     private final String colour;    // marker colour
     private final float hue;        // marker hue, derived from colour
     private int selected;           // whether the marker is selected
+    private final static Gson gson = new Gson();
 
-    public MyItem(double lat, double lng, String code, String name, String snippet, String refined, String phone, String colour) {
+    public MyItem(double lat, double lng, String code, String name, String snippet, String refined, String waypoints, String phone, String colour) {
         this.position = new LatLng(lat, lng);
         this.code = code;
         this.name = name;
         this.snippet = snippet;
         this.refined = refined;
+        this.waypoints = waypoints;
         this.phone = phone;
         this.colour = colour;
         this.hue = calcClr(colour);
         this.selected = -1;
+        this.positions = new HashMap<>();
+        String[] waypointsArray = waypoints.split(",");
+        for (String waypoint : waypointsArray) {
+            this.positions.put(waypoint.trim(), null);
+        }
+    }
+
+    public MyItem(double lat, double lng, String code, String name, String snippet, String refined, String waypoints, String jsonPositions, String phone, String colour) {
+        this.position = new LatLng(lat, lng);
+        this.code = code;
+        this.name = name;
+        this.snippet = snippet;
+        this.refined = refined;
+        this.waypoints = waypoints;
+        this.phone = phone;
+        this.colour = colour;
+        this.hue = calcClr(colour);
+        this.selected = -1;
+        this.positions = gson.fromJson(jsonPositions, BranchDirectoryMap.POSITIONS_TYPE);
     }
 
     // Parcelable implementation
@@ -42,10 +73,18 @@ public class MyItem implements ClusterItem, Parcelable {
         name = parcel.readString();
         snippet = parcel.readString();
         refined = parcel.readString();
+        waypoints = parcel.readString();
         phone = parcel.readString();
         colour = parcel.readString();
         hue = parcel.readFloat();
         selected = parcel.readInt();
+        int mapSize = parcel.readInt();
+        positions = new HashMap<>(mapSize);
+        for (int i = 0; i < mapSize; i++) {
+            String key = parcel.readString();
+            LatLng value = parcel.readParcelable(LatLng.class.getClassLoader());
+            positions.put(key, value);
+        }
     }
 
     public static final Creator<MyItem> CREATOR = new Creator<>() {
@@ -60,6 +99,25 @@ public class MyItem implements ClusterItem, Parcelable {
         }
     };
 
+    @Override
+    public void writeToParcel(@NonNull Parcel parcel, int flags) {
+        parcel.writeParcelable(position, flags);
+        parcel.writeString(code);
+        parcel.writeString(name);
+        parcel.writeString(snippet);
+        parcel.writeString(refined);
+        parcel.writeString(waypoints);
+        parcel.writeString(phone);
+        parcel.writeString(colour);
+        parcel.writeFloat(hue);
+        parcel.writeInt(selected);
+        parcel.writeInt(positions.size());
+        for (Map.Entry<String, LatLng> entry : positions.entrySet()) {
+            parcel.writeString(entry.getKey());
+            parcel.writeParcelable(entry.getValue(), flags);
+        }
+    }
+
     private float calcClr (String colour) {
         // blue reserved for route markers
         return switch (colour) {
@@ -69,7 +127,7 @@ public class MyItem implements ClusterItem, Parcelable {
             case "green" -> BitmapDescriptorFactory.HUE_GREEN;
             case "magenta" -> BitmapDescriptorFactory.HUE_MAGENTA;
             case "orange" -> BitmapDescriptorFactory.HUE_ORANGE;
-            case "rose" -> BitmapDescriptorFactory.HUE_ROSE;
+            case "rose" -> BitmapDescriptorFactory.HUE_RED;     // rose reserved for waypoint markers
             case "violet" -> BitmapDescriptorFactory.HUE_VIOLET;
             case "yellow" -> BitmapDescriptorFactory.HUE_YELLOW;
             default -> BitmapDescriptorFactory.HUE_RED;
@@ -103,6 +161,23 @@ public class MyItem implements ClusterItem, Parcelable {
         return refined;
     }
 
+    public String getWaypoints() {
+        return waypoints;
+    }
+
+    public Map<String, LatLng> getPositions() {
+        return positions;
+    }
+
+    public void setPositions(String waypoint, LatLng position) {
+        if (this.positions.containsKey(waypoint)) {
+            this.positions.put(waypoint, position);
+            Log.i(TAG, "MyItem setPositions new waypoint: " + this.positions);
+        } else {
+            Log.e(TAG, "MyItem setPositions - waypoint not found: " + waypoint);
+        }
+    }
+
     public String getPhone() {
         return phone;
     }
@@ -110,6 +185,7 @@ public class MyItem implements ClusterItem, Parcelable {
     public String getColour() {
         return colour;
     }
+
     public float getHue() {
         return selected > -1 ? BitmapDescriptorFactory.HUE_BLUE : hue;
     }
@@ -130,15 +206,6 @@ public class MyItem implements ClusterItem, Parcelable {
     @Override
     public int describeContents() {
         return 0;
-    }
-
-    @Override
-    public void writeToParcel(@NonNull Parcel parcel, int i) {
-        parcel.writeParcelable(position, i);
-        parcel.writeString(code);
-        parcel.writeString(name);
-        parcel.writeString(snippet);
-        parcel.writeString(refined);
     }
 
     public static class MyItemSorter {

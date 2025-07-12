@@ -11,7 +11,7 @@ android {
         minSdk 23
         targetSdk 35
         versionCode 1
-        versionName "0.1-alpha4"
+        versionName "0.1-beta1-preview"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -120,9 +120,10 @@ android {
         buildConfigField "String", "MULTI_ROW_SETS", "\"" + "${MULTIROWSETS}" + "\""
         buildConfigField "String", "USE_PHONE", "\"" + "${PHONE}" + "\""
         buildConfigField "String", "USE_REFINED", "\"" + "${REFINED}" + "\""
-        def rawRegion = GEOREGION
-        def escapedRegion = rawRegion.replaceAll('"', '\\\\"')
-        buildConfigField "String", "GEOCODE_REGION", "\"${escapedRegion}\""
+        buildConfigField "String", "TITLE_SPLIT", "\"" + "${TITLESPLIT}" + "\""
+        def RAWREGION = GEOREGION
+        def ESCREGION = RAWREGION.replaceAll('"', '\\\\"')
+        buildConfigField "String", "GEOCODE_REGION", "\"${ESCREGION}\""
         def DELIMVAL = (project.hasProperty("DELIM") ? "${DELIM}" : "")
         DELIMVAL = DELIMVAL.replaceAll(/\\ /, " ").replaceAll(/"([^"]*)"/, '$1')
         buildConfigField "String", "DELIMITER", "\"${DELIMVAL}\""
@@ -134,11 +135,13 @@ android {
         buildConfigField "String", "IGNORE_ROWS_BEGIN", "\"" + "${IGNOREROWSBEGIN}" + "\""
         buildConfigField "String", "IGNORE_ROWS_END", "\"" + "${IGNOREROWSEND}" + "\""
         buildConfigField "String", "TITLE_INDEX", "\"" + "${TITLEINDEX}" + "\""
+        buildConfigField "String", "TITLE_2_INDEX", "\"" + "${TITLE2INDEX}" + "\""
         buildConfigField "String", "ADDRESS_INDEX", "\"" + "${ADDRESSINDEX}" + "\""
         buildConfigField "String", "REFINED_ADDRESS_INDEX", "\"" + "${REFINEDADDRESSINDEX}" + "\""
         buildConfigField "String", "PHONE_INDEX", "\"" + "${PHONEINDEX}" + "\""
         buildConfigField "String", "ROWS_PER_SET", "\"" + "${ROWSPERSET}" + "\""
         buildConfigField "String", "TITLE_OFFSET", "\"" + "${TITLEOFFSET}" + "\""
+        buildConfigField "String", "TITLE_2_OFFSET", "\"" + "${TITLE2OFFSET}" + "\""
         buildConfigField "String", "ADDRESS_OFFSET", "\"" + "${ADDRESSOFFSET}" + "\""
         buildConfigField "String", "REFINED_ADDRESS_OFFSET", "\"" + "${REFINEDADDRESSOFFSET}" + "\""
         buildConfigField "String", "PHONE_OFFSET", "\"" + "${PHONEOFFSET}" + "\""
@@ -165,7 +168,6 @@ android {
     buildFeatures {
         viewBinding true
         buildConfig true
-        compose true
     }
 
     if("${PROXY}" == "false" && "${FIREBASE}" == "false") {
@@ -193,14 +195,6 @@ dependencies {
     implementation libs.navigation.ui
     implementation libs.activity
     implementation libs.android.maps.utils
-    implementation libs.lifecycle.runtime.ktx
-    implementation libs.activity.compose
-    implementation platform(libs.compose.bom)
-    implementation libs.ui
-    implementation libs.ui.graphics
-    implementation libs.ui.tooling.preview
-    implementation libs.media3.common
-    implementation libs.filament.android
     implementation libs.okhttp
     implementation libs.gson
     implementation libs.retrofit2.retrofit
@@ -220,8 +214,4 @@ dependencies {
     testImplementation libs.junit
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.espresso.core
-    androidTestImplementation platform(libs.compose.bom)
-    androidTestImplementation libs.ui.test.junit4
-    debugImplementation libs.ui.tooling
-    debugImplementation libs.ui.test.manifest
 }
