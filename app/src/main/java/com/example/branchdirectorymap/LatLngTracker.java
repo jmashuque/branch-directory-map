@@ -16,10 +16,6 @@ public class LatLngTracker {
         return latLngSet.add(newLatLng);
     }
 
-    public boolean containsLatLng(double latitude, double longitude) {
-        return latLngSet.contains(new LatLng(latitude, longitude));
-    }
-
     private static class LatLng {
 
         private final double latitude;

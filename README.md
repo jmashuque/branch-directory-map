@@ -178,7 +178,8 @@ Being a pre-release app, there are some known issues. Most notably your logcat w
 - revised: removed unused dependencies, including all of Jetpack Compose, and fragmented comments
 - revised: number of waypoints tracked so as to not exceed 23 (or 25 fpr Advanced Routing), hard limits set by Google
 - fix: avoidance options now passed to API's even without selecting waypoints
-- fix: for now, waypoints are truncated to the last one for routes sent to Maps App due to Google's 10 intermediates limit and inability to route through waypoints as "via" in the Maps App
+- fix: refined address included in marker info window if it isn't a plus code
+- fix: for now, waypoints are truncated to the last one for routes sent to Maps App due to Google's intermediates limit of 9 and inability to route through waypoints as "via" in the Maps App
 
 ### 0.1-alpha4 (2025-04-06)
 - feature: specify a Google Map ID to import your custom map style from your cloud project, will disable dark and monochrome toggles, pricing will be higher per map load
