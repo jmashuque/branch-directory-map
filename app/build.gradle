@@ -3,31 +3,52 @@ plugins {
     id 'com.google.gms.google-services'
 }
 
+def versionPropsFile = file("$rootDir/version.properties")
+def versionProps = new Properties()
+if (!versionPropsFile.exists()) {
+    versionPropsFile.withWriter { writer ->
+        versionProps.setProperty('VERSION_BUILD', '000000')
+        versionProps.store(writer, null)
+    }
+}
+versionProps.load(new FileInputStream(versionPropsFile))
+def previousBuildNum = versionProps['VERSION_BUILD'].toInteger()
+def newBuildNum = previousBuildNum + 1
+def formattedBuild = String.format('%06d', newBuildNum)
+tasks.named("preBuild").configure { pre ->
+    pre.doFirst {
+        versionProps.setProperty("VERSION_BUILD", formattedBuild)
+        versionPropsFile.withWriter { writer ->
+            versionProps.store(writer, null)
+        }
+    }
+}
+
 android {
     namespace 'com.example.branchdirectorymap'
-    compileSdk 35
+    compileSdk 36
     defaultConfig {
         applicationId "com.example.branchdirectorymap"
         minSdk 23
-        targetSdk 35
-        versionCode 1
-        versionName "0.1-beta1-preview"
+        targetSdk 36
+        versionCode newBuildNum
+        versionName "0.1-beta1 (build ${formattedBuild})"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         def mapsApiKey = ""
         def linkApiKey = ""
         def apiFile = rootProject.file("api.dat")
-        if(apiFile.exists()){
+        if (apiFile.exists()) {
             def lines = apiFile.readLines()
-            if(lines.size() >= 1){
+            if (lines.size() >= 1) {
                 mapsApiKey = lines[0].trim()
                 manifestPlaceholders = [MAPS_API_KEY: mapsApiKey]
             } else {
                 throw new GradleException("BUILD FAILED: 'api.dat' is empty")
             }
-            if("${PROXY}" == "false") {
-                if("${FIREBASE}" == "false" && lines.size() >= 2){
+            if ("${PROXY}" == "false") {
+                if ("${FIREBASE}" == "false" && lines.size() >= 2) {
                     linkApiKey = lines[1].trim()
                     def hexEncodedApiKey = linkApiKey.bytes.encodeHex().toString()
                     buildConfigField "boolean", "USE_FIREBASE", "false"
@@ -111,6 +132,16 @@ android {
         } else {
             buildConfigField "boolean", "ALLOW_DUPLICATES", "false"
         }
+        if ("${ALLMARKERS}" == "true") {
+            buildConfigField "boolean", "SHOW_ALL_HEADER", "true"
+        } else {
+            buildConfigField "boolean", "SHOW_ALL_HEADER", "false"
+        }
+        if ("${BADMARKERS}" == "true") {
+            buildConfigField "boolean", "SHOW_BAD_MARKERS", "true"
+        } else {
+            buildConfigField "boolean", "SHOW_BAD_MARKERS", "false"
+        }
         if ("${SETTINGSPERFILE}" == "true") {
             buildConfigField "boolean", "SETTINGS_PER_FILE", "true"
         } else {
@@ -121,6 +152,7 @@ android {
         buildConfigField "String", "USE_PHONE", "\"" + "${PHONE}" + "\""
         buildConfigField "String", "USE_REFINED", "\"" + "${REFINED}" + "\""
         buildConfigField "String", "TITLE_SPLIT", "\"" + "${TITLESPLIT}" + "\""
+        buildConfigField "String", "NAME_FIRST", "\"" + "${NAMEFIRST}" + "\""
         def RAWREGION = GEOREGION
         def ESCREGION = RAWREGION.replaceAll('"', '\\\\"')
         buildConfigField "String", "GEOCODE_REGION", "\"${ESCREGION}\""

@@ -1,8 +1,5 @@
 package com.example.branchdirectorymap;
 
-import static androidx.core.app.ActivityCompat.finishAffinity;
-
-import android.app.Activity;
 import android.content.Context;
 import android.os.Debug;
 import android.os.Handler;
@@ -24,7 +21,7 @@ public class Secrets {
 
     public static class EncryptedSharedPreferencesReflection {
 
-        public static Object createEncryptedSharedPreferences(Context context, String prefsName) throws Exception {
+        private static Object createEncryptedSharedPreferences(Context context, String prefsName) throws Exception {
             Class<?> espClass = Class.forName("androidx.security.crypto.EncryptedSharedPreferences");
             Class<?> masterKeyClass = Class.forName("androidx.security.crypto.MasterKey");
             Class<?> builderClass = Class.forName("androidx.security.crypto.MasterKey$Builder");
@@ -307,6 +304,7 @@ public class Secrets {
         return new String(decryptedData, StandardCharsets.UTF_8);
     }
 
+    // Boolean objects can be null as well
     public static @Nullable Boolean isRootOrDebug(Context context) {
         try {
             Class<?> rootBeerClass = Class.forName("com.scottyab.rootbeer.RootBeer");

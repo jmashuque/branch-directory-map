@@ -3,6 +3,7 @@
     <string name="title_activity_file">File Selection</string>
     <string name="title_activity_maps">Map</string>
     <string name="loading">Loading...</string>
+    <string name="search_hint">search</string>
     <string name="btn_navi">Start Navigation</string>
     <string name="btn_view">View in Maps</string>
     <string name="btn_add">Add to Route</string>
@@ -21,6 +22,7 @@
     <string name="yes">Yes</string>
     <string name="no">No</string>
     <string name="ok">OK</string>
+    <string name="header_all">All</string>
     <string name="warning">Warning</string>
     <string name="finished">Finished loading markers</string>
     <string name="no_results">No results found</string>
@@ -31,6 +33,19 @@
     <string name="max_intermediates_ext">Google Maps App has a limit of 9 intermediate steps including waypoints, please shorten the route</string>
     <string name="gm_not_found">Google Maps was not found on your device</string>
     <string name="location_denied">Location permission denied, this app will not work properly</string>
+    <string name="route_options">Route Options</string>
+    <string name="traffic">Traffic</string>
+    <string name="highways">Highways</string>
+    <string name="tolls">Tolls</string>
+    <string name="ferries">Ferries</string>
+    <string name="couldnt_avoid_one">Couldn\'t avoid %1$s</string>
+    <string name="couldnt_avoid_two">Couldn\'t avoid %1$s or %2$s</string>
+    <string name="couldnt_avoid_three">Couldn\'t avoid %1$s, %2$s, or %3$s</string>
+    <string name="map_options">Map Options</string>
+    <string name="map_type">Map Type</string>
+    <string name="mono">Mono</string>
+    <string name="app_theme">App Theme</string>
+    <string name="alt">Alt</string>
     <string-array name="traffic_dropdown">
         <item>No Traffic</item>
         <item>Best Guess</item>
@@ -43,8 +58,19 @@
     </string-array>
     <string-array name="appearance_dropdown">
         <item>Normal</item>
-        <item>Terrain</item>
         <item>Satellite</item>
+        <item>Terrain</item>
         <item>Hybrid</item>
+    </string-array>
+    <string-array name="theme_dropdown_sensor">
+        <item>System</item>
+        <item>Day</item>
+        <item>Night</item>
+        <item>Ambient</item>
+    </string-array>
+    <string-array name="theme_dropdown">
+        <item>System</item>
+        <item>Day</item>
+        <item>Night</item>
     </string-array>
 </resources>

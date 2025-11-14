@@ -41,155 +41,52 @@ android.enableR8.fullMode=false
 
 # USER BUILD SETTINGS
 
-# (int)[] x-index(es) of address column
-ADDRESSINDEX=1,2
-
-# (int)[] y-index(es) of address column
-ADDRESSOFFSET=0,0
-
-# (bool) use Routes API instead of Directions API for detailed traffic metrics, higher
-# pricing than basic routing
+ADDRESSINDEX=1,2,1
+ADDRESSOFFSET=0,0,0
 ADVANCEDROUTES=true
-
-# (int) minimum delay between queries, do not exceed 50 requests / second for free tier
+ALLMARKERS=true
+BADMARKERS=false
 BASEDELAY=10
-
-# (str)[] delimiter(s) for multiple codes, cannot use the same values from DELIM
-CODEDELIM=,/
-
-# (str)[] prefix(es) for codes
-CODEPREFIX=RAN,RBN
-
-# (str)[] colour(s) for markers
-COLOURS=red,green
-
-# (int)[] number of columns per row
-COLUMNSPERROW=4,4
-
-# (str) internal db file name
+CODEDELIM=,/,
+CODEPREFIX=RAN,RBN,
+COLOURS=red,green,yellow
+COLUMNSPERROW=4,5,3
 DBFILE=branches.db
-
-# (str) default file from FILENAMES, if not specified then first file is up to java
-DEFAULTFILE=LA_branches.csv
-
-# (str)[] delimiter(s) between code and name, use " " for a single space, required if
-# TITLESPLIT is true
-DELIM=" "," "
-
-# (bool) allow more than one marker to occupy the same latitude/longitude coordinates
+DEFAULTFILE=
+DELIM=" "," "," "
 DUPLICATES=false
-
-# (bool) use embedded db or csv file(s)
 EMBEDDED=true
-
-# (str) embedded db file name
 EMBEDDEDDB=
-
-# (bool) export db file to download folder, uses DBFILE as file name
 EXPORT=true
-
-# (str)[] embedded csv file name(s)
-FILENAMES=LA_branches.csv,CA_branches.csv
-
-# (bool) use firebase remote config to get api key, otherwise use api.dat and store in ndk
+FILENAMES=LA_branches.csv,CA_branches.csv,US_branches.csv
 FIREBASE=true
-
-# (str)[] string to add to all addresses when geocoding, except for addresses containing
-# plus codes, place in double quotes if values contain commas
-GEOREGION="United States","United States"
-
-# (int)[] ignore first x row(s)
-IGNOREROWSBEGIN=1,1
-
-# (int)[] ignore last x non-empty row(s)
-IGNOREROWSEND=0,0
-
-# (int) max number of intermediate markers, regular routing max is 23 and advanced routing
-# max is 25 as defined by Google, for advanced routing exceeding 10 intermediates will
-# result in higher billing rate, for the external Maps App the max intermediates is 9
+GEOREGION="United States","United States","United States"
+IGNOREROWSBEGIN=1,1,1
+IGNOREROWSEND=0,0,0
 INTERMEDIATES=9
-
-# (bool) use ambient light sensor to dynamically adjust theme to light or dark, in
-# development, do not change
-LIGHTSENSOR=false
-
-# (str) optional map ID to apply styling from your map instances stored on Maps Platform,
-# will override JSON styling, disables dark and mono switches, changes pricing of map
-# usage if used
+LIGHTSENSOR=true
 MAPID=
-
-# (int) max number of threads to use for geocode requests, do not overload Google servers
 MAXTHREADS=2
-
-# (int) min number of markers in a cluster
 MINCLUSTERSIZE=5
-
-# (bool)[] use multiple rows per entry
-MULTIROWSETS=false,false
-
-# (bool)[] use phone numbers
-PHONE=true,true
-
-# (int)[] x-index(es) of phone number column
-PHONEINDEX=3,4
-
-# (int)[] y-index(es) of phone number column
-PHONEOFFSET=0,0
-
-# (bool) use a proxy for all requests, in development, do not change
+MULTIROWSETS=false,false,false
+NAMEFIRST=false,false,true
+PHONE=true,true,true
+PHONEINDEX=3,4,2
+PHONEOFFSET=0,0,0
 PROXY=false
-
-# (str) proxy url, in development, do not change
 PROXYURL=
-
-# (int) max random delay between queries, prevents request collisions, do not exceed
-# 50 requests / second for free tier
 RANDOMDELAY=50
-
-# (bool)[] use refined address column, such as postal code or google plus code
-REFINED=true,true
-
-# (int)[] x-index(es) of refined address column
-REFINEDADDRESSINDEX=2,3
-
-# (int)[] y-index(es) of refined address column
-REFINEDADDRESSOFFSET=0,0
-
-# (bool) allow root access
+REFINED=true,true,false
+REFINEDADDRESSINDEX=2,3,
+REFINEDADDRESSOFFSET=0,0,
 ROOT=false
-
-# (int)[] number of rows per set
-ROWSPERSET=1,1
-
-# (bool) read comma separated values, one set per file name expected, otherwise first
-# value used, settings that can have multiple values are denoted by [] after (type)
+ROWSPERSET=1,1,1
 SETTINGSPERFILE=true
-
-# (str)[4] raw resource file names for map styling, for reference only, do not change,
-# you can alter the files themselves to apply custom styling
-STYLEJSON=light.json,dark.json,light_mono.json,dark_mono.json
-
-# (int) timeout in seconds for firebase api key remote config
+STYLEJSON=light.json,dark.json,light_mono.json,dark_mono.json,light_alt.json,dark_alt.json
 TIMEOUT=10
-
-# (int)[] x-index(es) of title column, title includes branch code and/or name
-TITLEINDEX=0,1
-
-# (int)[] y-index(es) of title column, title includes branch code and/or name
-TITLEOFFSET=0,0
-
-# (bool)[] combine branch code and name from separate fields, if true then TITLE is
-# assumed to be name and TITLE2 is assumed to be code, DELIM is used as the character
-# between the code and the name internally and when displayed
-TITLESPLIT=false,true
-
-# (int)[] x-index(es) of branch code column, only referenced if TITLESPLIT is true,
-# otherwise TITLE is assumed to contain code
-TITLE2INDEX=,0
-
-# (int)[] y-index(es) of branch code column, only referenced if TITLESPLIT is true,
-# otherwise TITLE is assumed to contain code
-TITLE2OFFSET=,0
-
-# (double)[4] ratio of duration for light, moderate, heavy, and severe traffic
+TITLEINDEX=0,1,0
+TITLEOFFSET=0,0,0
+TITLESPLIT=false,true,false
+TITLE2INDEX=,0,
+TITLE2OFFSET=,0,
 TRAFFICMETRICS=1.05,1.15,1.25,1.40

@@ -5,7 +5,6 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
-import android.os.Debug;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -62,7 +61,7 @@ public class MainActivity extends AppCompatActivity {
 //        Log.i(TAG, "onDestroy() called");
 //    }
 
-    private void permissionStep() {
+    public void permissionStep() {
         Log.i(TAG, "permissionStep");
         SharedPreferences.Editor editor = sharedPreferences.edit();
         editor.putBoolean(BranchDirectoryMap.KEY_FIRST_RUN, true).apply();
@@ -98,7 +97,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void rootStep() {
+    public void rootStep() {
         Log.i(TAG, "rootStep");
         if (!BuildConfig.ALLOW_ROOT) {
             Boolean isTerminate = Secrets.isRootOrDebug(this);
@@ -120,7 +119,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void fileStep() {
+    public void fileStep() {
         Log.i(TAG, "fileStep");
         if (sharedPreferences.getBoolean(BranchDirectoryMap.KEY_USE_LAST, false)) {
             if (!sharedPreferences.getBoolean(BranchDirectoryMap.KEY_LOAD_FINISHED, false)) {
@@ -137,7 +136,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void callNextActivity() {
+    public void callNextActivity() {
         Log.i(TAG, "callNextActivity");
         Intent intent = new Intent(this, FileSelectionActivity.class);
         startActivity(intent);

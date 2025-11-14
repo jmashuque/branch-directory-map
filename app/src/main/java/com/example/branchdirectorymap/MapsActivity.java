@@ -7,15 +7,25 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.database.Cursor;
 import android.database.MatrixCursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Color;
 import android.graphics.Point;
+import android.graphics.PorterDuff;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.location.Location;
 import android.net.Uri;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -25,26 +35,45 @@ import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
 import android.util.Log;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.Window;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
-import android.widget.Button;
+import android.widget.BaseAdapter;
+import android.widget.CompoundButton;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.Spinner;
+import android.widget.SpinnerAdapter;
 import android.widget.TextView;
+import android.widget.ThemedSpinnerAdapter;
 import android.widget.Toast;
 
+import androidx.activity.OnBackPressedCallback;
+import androidx.annotation.ArrayRes;
+import androidx.annotation.ColorInt;
+import androidx.annotation.LayoutRes;
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatDelegate;
+import androidx.appcompat.content.res.AppCompatResources;
 import androidx.appcompat.widget.SearchView;
-import androidx.appcompat.widget.SwitchCompat;
+import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.drawable.DrawableCompat;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
+import androidx.core.widget.ImageViewCompat;
 import androidx.cursoradapter.widget.SimpleCursorAdapter;
-import androidx.fragment.app.FragmentActivity;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
@@ -63,8 +92,9 @@ import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
-import com.google.gson.Gson;
+import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -87,17 +117,21 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
 import java.util.Scanner;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -108,14 +142,16 @@ import okhttp3.Response;
 import retrofit2.Call;
 import retrofit2.Callback;
 
-public class MapsActivity extends FragmentActivity implements OnMapReadyCallback, GoogleMap.OnInfoWindowCloseListener, CustomInfoWindowAdapter.InfoWindowOpenListener {
+public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback, GoogleMap.OnInfoWindowCloseListener, CustomInfoWindowAdapter.InfoWindowOpenListener {
 
     private static final String TAG = "SYS-MAPS";
     private Context context;
     private GoogleMap mMap;
+    private boolean mapReady = false;
+    private final List<Runnable> afterMapReady = new ArrayList<>();
+    private final Set<String> afterMapReadyKeys = new HashSet<>();
     private FusedLocationProviderClient fusedLocationClient;
     private DialogUtils dialogUtils;
-    private Gson gson;
     private String linkApiKey;
     private String varMapStr;
     private List<String> stylesList;
@@ -127,34 +163,48 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private MapLoaderTask task;
     private GetInformationTask getInformationTask;
     private Location lastKnownLocation;
+    private ConstraintLayout searchViewLayout;
     private ImageButton menuButton;
     private Spinner searchSpinner;
     private TextView loadTextView;
     private LinearLayout markerButtonsLayout;
-    private Button viewMarkerButton;
-    private Button addMarkerButton;
-    private Button removeMarkerButton;
-    private Button callMarkerButton;
+    private MaterialButton viewMarkerButton;
+    private MaterialButton addMarkerButton;
+    private MaterialButton removeMarkerButton;
+    private MaterialButton callMarkerButton;
     private SearchSpinnerAdapter searchAdapter;
     private FloatingActionButton routeButton;
     private LinearLayout routeMenu;
     private FloatingActionButton layersButton;
     private LinearLayout layersMenu;
-    private SwitchCompat switchDark;
-    private SwitchCompat switchMono;
+    private Spinner appearanceSpinner;
+    private Spinner themeSpinner;
+    private MaterialSwitch switchTraffic;
+    private View buttonToChange;
+    private View menuToChange;
+    private MaterialSwitch switchAlt;
+    private MaterialSwitch switchMono;
+    private FloatingActionButton directionsRouteButton;
     private FloatingActionButton clearRouteButton;
-    private ClusterManager<MyItem> clusterManager;
+    private Spinner trafficSpinner;
+    private MaterialSwitch switchHighways;
+    private MaterialSwitch switchTolls;
+    private MaterialSwitch switchFerries;
+    private RelativeLayout.LayoutParams clearRouteButtonParams;
+    private ClusterManager<CustomItem> clusterManager;
     private CustomClusterRenderer customRenderer;
     private CustomInfoWindowAdapter customAdapter;
-    private Map<String, List<MyItem>> markers;
+    private Map<String, List<CustomItem>> markers;
+    private Map<String, List<CustomItem>> badMarkers;
     private Marker currentMarker;
     private Marker tempMarker;
-    private MyItem currentItem;
-    private final Map<String, Map<MyItem, Marker>> clusterItemMarkerMap = new HashMap<>();
+    private CustomItem currentItem;
+    private final Map<String, Map<CustomItem, Marker>> clusterItemMarkerMap = new HashMap<>();
     private final List<Marker> waypointList = new ArrayList<>();
-    private CustomSearchView searchView;
+    private SearchView searchView;
+    private SearchView.OnQueryTextListener queryListener;
     private SimpleCursorAdapter suggestionAdapter;
-    private final ArrayList<ArrayList<MyItem>> filteredSuggestions = new ArrayList<>();
+    private final ArrayList<ArrayList<CustomItem>> filteredSuggestions = new ArrayList<>();
     private final Map<String, ArrayList<Object>> routeMarkers = new LinkedHashMap<>();
     private LocationDatabaseHelper dbHelper;
     private SQLiteDatabase db;
@@ -168,15 +218,18 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private final List<Polyline> polylines = new ArrayList<>();
     private SpannableString oldTrafficText;
     private java.text.SimpleDateFormat sdf;
-    private Cluster<MyItem> lastCluster;
+    private Cluster<CustomItem> lastCluster;
     private boolean lastSelected;
+    private boolean suppressQuery = false;
+    private boolean suppressListener = true;
     private Animation animDisappear;
     private String currentTable;
     private long start;
     private String trafficMode;
     private int local_intermediates;
     private int intermediates_count = 0;
-    private int mapMode = GoogleMap.MAP_TYPE_NORMAL;
+    private int mapMode = BranchDirectoryMap.DEFAULT_MODE;
+    private int appTheme = BranchDirectoryMap.DEFAULT_THEME;
     private boolean locationPermissionGranted = false;
     private boolean isCentered = false;
     private boolean isInfoWindowOpen = false;
@@ -185,22 +238,35 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private boolean isHighwaysEnabled = true;
     private boolean isTollsEnabled = true;
     private boolean isFerriesEnabled = true;
-    private boolean isTrafficEnabled = true;
     private boolean isDarkEnabled = false;
+    private boolean isAmbientEnabled = false;
+    private boolean isTrafficEnabled = true;
+    private boolean isAltEnabled = false;
     private boolean isMonoEnabled = false;
     private boolean doubleBackToExitPressedOnce = false;
+    private SensorManager sensorManager;
+    private Sensor lightSensor;
+    private SensorEventListener lightListener;
+    private volatile float lastLux = Float.NaN;
+    private ScheduledExecutorService ambientExecutor;
+    private ScheduledFuture<?> ambientFuture;
+    private volatile Boolean lastAppliedDark = null;
+    private static final int VIOLATION_TOLLS    = 1;      // 001
+    private static final int VIOLATION_FERRIES  = 1 << 1; // 010
+    private static final int VIOLATION_HIGHWAYS = 1 << 2; // 100
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        setAppTheme(appTheme, false);
         setContentView(R.layout.activity_maps);
-
+        getOnBackPressedDispatcher().addCallback(this, backPressedCallback);
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map_fragment);
         context = this;
 
+        searchViewLayout = findViewById(R.id.layout_searchview);
         searchView = findViewById(R.id.searchView);
         markerButtonsLayout = findViewById(R.id.layout_marker_buttons);
-        gson = new Gson();
         dbHelper = new LocationDatabaseHelper(this);
         dialogUtils = new DialogUtils();
         sdf = new java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault());
@@ -232,12 +298,14 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         getCurrentLocation(this::centerOnUser);
         setupInterface();
         setupSearchView();
-        setAutoCompleteThreshold(searchView);    // show suggestions immediately
+        restyleAfterThemeChange();
+        setAutoCompleteThreshold(searchView);   // show suggestions immediately
+        suggestionPopupResize(searchView);      // gap between suggestion dropdown and IME
         handleIntent(getIntent());
         mapFragment.getMapAsync(this);
     }
     
-    private void getLocationPermission() {
+    public void getLocationPermission() {
         if (ContextCompat.checkSelfPermission(this.getApplicationContext(),
                 android.Manifest.permission.ACCESS_FINE_LOCATION)
                 == PackageManager.PERMISSION_GRANTED) {
@@ -255,14 +323,14 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         handleIntent(intent);
     }
 
-    private void handleIntent(Intent intent) {
+    public void handleIntent(Intent intent) {
         if (Intent.ACTION_SEARCH.equals(intent.getAction())) {
             String query = intent.getStringExtra(SearchManager.QUERY);
             performSearch(query);
         }
     }
 
-    private void setupInterface() {
+    public void setupInterface() {
         menuButton = findViewById(R.id.button_menu);
         menuButton.setOnClickListener(v -> {
             menuToggler();
@@ -270,32 +338,68 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         menuButton.setVisibility(View.GONE);
 
         searchSpinner = findViewById(R.id.spinner_search);
-        searchAdapter = new SearchSpinnerAdapter(this, tables);
+        if (BuildConfig.SHOW_ALL_HEADER) {
+            searchAdapter = new SearchSpinnerAdapter(this, tables, getString(R.string.header_all));
+        } else {
+            searchAdapter = new SearchSpinnerAdapter(this, tables, null);
+        }
         searchSpinner.setAdapter(searchAdapter);
         searchSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                Log.i(TAG, "triggered searchSpinner onItemSelected");
+                Log.i(TAG, "position: " + position + " item: " + parent.getItemAtPosition(position).toString());
+
                 currentTable = parent.getItemAtPosition(position).toString();
                 searchAdapter.setSelectedItemPosition(position);
                 updateSuggestions("");
+                routeMarkers.clear();
+                moveRouteButtons();
                 clusterManager.clearItems();
-                for (MyItem marker : MyItem.MyItemSorter.sortMyItemsByCode(markers.get(currentTable))) {
+                for (CustomItem marker : markers.get(currentTable)) {
                     clusterManager.addItem(marker);
                 }
                 clusterManager.cluster();
             }
 
             @Override
-            public void onNothingSelected(AdapterView<?> parent) {}
+            public void onNothingSelected(AdapterView<?> parent) {
+                Log.i(TAG, "triggered searchSpinner onNothingSelected");
+            }
         });
         searchSpinner.setVisibility(View.GONE);
 
         Animation animLeftMenu = AnimationUtils.loadAnimation(this, R.anim.menu_left_anim);
         animDisappear = AnimationUtils.loadAnimation(this, R.anim.menu_disappear);
+        animDisappear.setAnimationListener(new Animation.AnimationListener() {
+            @Override
+            public void onAnimationStart(Animation animation) {
+            }
+
+            @Override
+            public void onAnimationRepeat(Animation animation) {
+            }
+
+            @Override
+            public void onAnimationEnd(Animation animation) {
+                if (menuToChange != null) {
+                    menuToChange.setVisibility(View.GONE);
+                    if (menuToChange == layersMenu) {
+                        moveRouteButtons();
+                    }
+                    menuToChange = null;
+                }
+                if (buttonToChange != null) {
+                    buttonToChange.setVisibility(View.VISIBLE);
+                    buttonToChange = null;
+                }
+            }
+        });
 
         routeButton = findViewById(R.id.button_route);
         routeButton.setOnClickListener(v -> {
             routeMenu.setVisibility(View.VISIBLE);
+            routeMenu.bringToFront();
             routeMenu.startAnimation(animLeftMenu);
             routeButton.setVisibility(View.GONE);
             clearMenus("R");
@@ -306,7 +410,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         routeMenu = findViewById(R.id.menu_route);
         routeMenu.setVisibility(View.GONE);
 
-        Spinner trafficSpinner = findViewById(R.id.spinner_traffic);
+        trafficSpinner = findViewById(R.id.spinner_traffic);
         ArrayAdapter<CharSequence> trafficAdapter;
         int arrayResId;
         if (BuildConfig.USE_ADVANCED_ROUTING) {
@@ -337,21 +441,21 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             trafficSpinner.setSelection(trafficAdapter.getPosition(trafficMode));
         }
 
-        SwitchCompat switchHighways = findViewById(R.id.switch_highways);
+        switchHighways = findViewById(R.id.switch_highways);
         switchHighways.setChecked(isHighwaysEnabled);
         switchHighways.setOnCheckedChangeListener((buttonView, isChecked) -> {
             isHighwaysEnabled = isChecked;
             clearMap();
         });
 
-        SwitchCompat switchTolls = findViewById(R.id.switch_tolls);
+        switchTolls = findViewById(R.id.switch_tolls);
         switchTolls.setChecked(isTollsEnabled);
         switchTolls.setOnCheckedChangeListener((buttonView, isChecked) -> {
             isTollsEnabled = isChecked;
             clearMap();
         });
 
-        SwitchCompat switchFerries = findViewById(R.id.switch_ferries);
+        switchFerries = findViewById(R.id.switch_ferries);
         switchFerries.setChecked(isFerriesEnabled);
         switchFerries.setOnCheckedChangeListener((buttonView, isChecked) -> {
             isFerriesEnabled = isChecked;
@@ -363,17 +467,19 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         layersButton = findViewById(R.id.button_layers);
         layersButton.setOnClickListener(v -> {
             layersMenu.setVisibility(View.VISIBLE);
+            layersMenu.bringToFront();
             layersMenu.startAnimation(animRightMenu);
             layersButton.setVisibility(View.GONE);
             clearMenus("L");
             clearMap();
+            moveRouteButtons();
         });
         layersButton.setVisibility(View.GONE);
 
         layersMenu = findViewById(R.id.menu_layers);
         layersMenu.setVisibility(View.GONE);
 
-        Spinner appearanceSpinner = findViewById(R.id.spinner_appearance);
+        appearanceSpinner = findViewById(R.id.spinner_appearance);
         ArrayAdapter<CharSequence> appearanceAdapter = ArrayAdapter.createFromResource(
                 this,
                 R.array.appearance_dropdown,
@@ -383,40 +489,68 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         appearanceSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                switch (position) {
-                    case 0:
-                        mapMode = GoogleMap.MAP_TYPE_NORMAL;
-                        switchToggler(switchDark, true);
-                        switchToggler(switchMono, true);
-                        break;
-                    case 1:
-                        mapMode = GoogleMap.MAP_TYPE_TERRAIN;
-                        switchToggler(switchDark, false);
-                        switchToggler(switchMono, false);
-                        break;
-                    case 2:
-                        mapMode = GoogleMap.MAP_TYPE_SATELLITE;
-                        switchToggler(switchDark, false);
-                        switchToggler(switchMono, false);
-                        break;
-                    case 3:
-                        mapMode = GoogleMap.MAP_TYPE_HYBRID;
-                        switchToggler(switchDark, false);
-                        switchToggler(switchMono, false);
-                        break;
-                    default:
-                        Log.i(TAG, "unknown map mode in appearanceSpinner");
-                        break;
+                Log.i(TAG, "triggered appearanceSpinner onItemSelected");
+                if (!suppressListener) {
+                    switch (position) {
+                        case 0:
+                            mapMode = GoogleMap.MAP_TYPE_NORMAL;
+                            switchToggler(switchAlt, true);
+                            switchToggler(switchMono, true);
+                            break;
+                        case 1:
+                            mapMode = GoogleMap.MAP_TYPE_SATELLITE;
+                            switchToggler(switchAlt, false);
+                            switchToggler(switchMono, false);
+                            break;
+                        case 2:
+                            mapMode = GoogleMap.MAP_TYPE_TERRAIN;
+                            switchToggler(switchAlt, false);
+                            switchToggler(switchMono, false);
+                            break;
+                        case 3:
+                            mapMode = GoogleMap.MAP_TYPE_HYBRID;
+                            switchToggler(switchAlt, false);
+                            switchToggler(switchMono, false);
+                            break;
+                        default:
+                            Log.e(TAG, "unknown map mode in appearanceSpinner");
+                            break;
+                    }
+                    mMap.setMapType(mapMode);
+                    clearMap();
                 }
-                mMap.setMapType(mapMode);
-                clearMap();
             }
 
             @Override
             public void onNothingSelected(AdapterView<?> parent) {}
         });
+        appearanceSpinner.setSelection(mapMode);
 
-        SwitchCompat switchTraffic = findViewById(R.id.switch_traffic);
+        themeSpinner = findViewById(R.id.spinner_theme);
+        ArrayAdapter<CharSequence> themeAdapter = ArrayAdapter.createFromResource(
+                this,
+                BuildConfig.USE_LIGHT_SENSOR ? R.array.theme_dropdown_sensor : R.array.theme_dropdown,
+                R.layout.spinner_selected_item);
+        themeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        themeSpinner.setAdapter(themeAdapter);
+        themeSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+//                Log.i(TAG, "triggered themeSpinner onItemSelected");
+//                Log.i(TAG, "position: " + position + " item: " + parent.getItemAtPosition(position).toString());
+                if (!suppressListener) {
+                    appTheme = position;
+                    setAppTheme(appTheme, true);
+                }
+                suppressListener = false;
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {}
+        });
+        themeSpinner.setSelection(appTheme);
+
+        switchTraffic = findViewById(R.id.switch_traffic);
         switchTraffic.setChecked(isTrafficEnabled);
         switchTraffic.setOnCheckedChangeListener((buttonView, isChecked) -> {
             isTrafficEnabled = isChecked;
@@ -424,10 +558,13 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             clearMap();
         });
 
-        switchDark = findViewById(R.id.switch_dark);
-        switchDark.setChecked(isDarkEnabled);
-        switchDark.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            isDarkEnabled = isChecked;
+        switchAlt = findViewById(R.id.switch_alt);
+        switchAlt.setChecked(isAltEnabled);
+        switchAlt.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            isAltEnabled = isChecked;
+            if (isAltEnabled) {
+                switchMono.setChecked(false);
+            }
             setMapStyle();
         });
 
@@ -435,11 +572,45 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         switchMono.setChecked(isMonoEnabled);
         switchMono.setOnCheckedChangeListener((buttonView, isChecked) -> {
             isMonoEnabled = isChecked;
+            if (isMonoEnabled) {
+                switchAlt.setChecked(false);
+            }
             setMapStyle();
+        });
+
+        directionsRouteButton = findViewById(R.id.button_directions);
+        directionsRouteButton.setOnClickListener(v -> {
+            LinkedHashMap<String, ArrayList<Object>> snapshotMap = deepCopyMap(routeMarkers);
+            String lastKey = getLastKey(routeMarkers);
+            ArrayList<Object> lastList = routeMarkers.get(lastKey);
+            CustomItem snapshotItem = currentItem.deepCopy();
+            currentItem = ((CustomItem) lastList.get(1)).deepCopy();
+            routeMarkers.remove(lastKey);
+
+            LatLng position;
+            if (currentItem.getLastWaypoint() != null && !currentItem.getLastWaypoint().isEmpty()) {
+                position = currentItem.getWaypoints().get(currentItem.getLastWaypoint());
+            } else {
+                position = currentItem.getPosition();
+            }
+            StringBuilder url = new StringBuilder(BranchDirectoryMap.DIR_URL);
+            url.append(position.latitude).append(",").append(position.longitude);
+            if (!routeMarkers.isEmpty() || currentItem.getWaypointsCount() > 1) {
+                StringBuilder params = waypointCombiner("|", true);
+                if (params.length() > 0) {
+                    url.append(params);
+                }
+            }
+            openMapsApp(Uri.parse(url.toString()));
+
+            currentItem = snapshotItem.deepCopy();
+            routeMarkers.clear();
+            routeMarkers.putAll(snapshotMap);
         });
 
         clearRouteButton = findViewById(R.id.button_clear);
         clearRouteButton.setOnClickListener(v -> clearRoute());
+        clearRouteButtonParams = (RelativeLayout.LayoutParams) clearRouteButton.getLayoutParams();
 
         viewMarkerButton = findViewById(R.id.button_marker_view);
         viewMarkerButton.setOnClickListener(view -> {
@@ -463,7 +634,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         });
     }
 
-    private void setupSearchView() {
+    public void setupSearchView() {
         SearchManager searchManager = (SearchManager) getSystemService(Context.SEARCH_SERVICE);
         searchView.setSearchableInfo(searchManager.getSearchableInfo(getComponentName()));
         searchView.setIconifiedByDefault(false);
@@ -476,9 +647,10 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
         searchView.setOnClickListener(v -> searchView.setIconified(false));
 
-        searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+        queryListener = new SearchView.OnQueryTextListener() {
             @Override
             public boolean onQueryTextSubmit(String query) {
+                Log.i(TAG, "triggered onQueryTextSubmit");
                 performSearch(query);
                 return false;
             }
@@ -486,10 +658,14 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             @Override
             public boolean onQueryTextChange(String newText) {
                 Log.i(TAG, "triggered onQueryTextChange");
-                updateSuggestions(newText);
+                Log.i(TAG, "suppressQuery: " + suppressQuery);
+                if (!suppressQuery) {
+                    updateSuggestions(newText);
+                }
                 return false;
             }
-        });
+        };
+        searchView.setOnQueryTextListener(queryListener);
 
         searchView.setOnSuggestionListener(new SearchView.OnSuggestionListener() {
             @Override
@@ -520,7 +696,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         searchView.setVisibility(View.GONE);
     }
 
-    private void setAutoCompleteThreshold(SearchView searchView) {
+    public void setAutoCompleteThreshold(SearchView searchView) {
         try {
             Field searchAutoCompleteField = SearchView.class.getDeclaredField("mSearchSrcTextView");
             searchAutoCompleteField.setAccessible(true);
@@ -531,9 +707,86 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
     }
 
+    private void suggestionPopupResize(SearchView searchView) {
+        final AutoCompleteTextView auto = getSearchAutoComplete(searchView);
+        if (auto == null) {
+            Log.e(TAG, "Could not find mSearchSrcTextView");
+            return;
+        }
+
+        auto.setImeOptions(auto.getImeOptions() | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
+
+        Runnable applyFixed = () -> {
+            int desired = preImeCapPx(searchView);
+            int available = availableBelowPx(searchView, auto);
+            int fixedHeight = Math.max(0, Math.min(desired, available));
+
+            int width = searchView.getWidth();
+            if (width > 0) {
+                auto.setDropDownWidth(width);
+                auto.setDropDownHorizontalOffset(0);
+            }
+            auto.setDropDownHeight(fixedHeight);
+//            Log.i(TAG, "fixedHeight=" + fixedHeight + " desired=" + desired + " available=" + available);
+        };
+
+        searchView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> applyFixed.run());
+
+        auto.setOnFocusChangeListener((v, hasFocus) -> {
+            if (hasFocus) {
+                applyFixed.run();
+                auto.post(auto::showDropDown);
+            }
+        });
+
+        searchView.post(applyFixed);
+    }
+
+    private int preImeCapPx(View anyView) {
+        int h = anyView.getRootView().getHeight();
+        return Math.max(dp(anyView.getContext(), 160), (int) (h * BranchDirectoryMap.SUGGESTION_RATIO));
+    }
+
+    private int availableBelowPx(View host, AutoCompleteTextView auto) {
+        int[] loc = new int[2];
+        auto.getLocationOnScreen(loc);
+        int autoBottom = loc[1] + auto.getHeight();
+
+        int screenH = host.getRootView().getHeight();
+        int systemBottomInset = 0;
+        try {
+            WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(host);
+            if (insets != null) {
+                systemBottomInset = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom;
+            }
+        } catch (Throwable ignored) {}
+        int windowBottom = screenH - systemBottomInset;
+
+        int gap = dp(host.getContext(), 2);
+        return Math.max(0, windowBottom - autoBottom - gap);
+    }
+
+    private AutoCompleteTextView getSearchAutoComplete(SearchView searchView) {
+        try {
+            Field f = SearchView.class.getDeclaredField("mSearchSrcTextView");
+            f.setAccessible(true);
+            Object obj = f.get(searchView);
+            if (obj instanceof AutoCompleteTextView) return (AutoCompleteTextView) obj;
+        } catch (Throwable t) {
+            Log.e(TAG, "Reflection failed: " + t);
+        }
+        return null;
+    }
+
+    private int dp(Context c, int d) {
+        return (int) (d * c.getResources().getDisplayMetrics().density);
+    }
+
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
+        mapReady = true;
+
         updateLocationUI();
         if (lastKnownLocation != null) {
             centerOnUser();
@@ -555,6 +808,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 clearInfoWindow();
             }
             searchView.setQuery("", false);
+            Log.i(TAG, "clearfocus 1");
             searchView.clearFocus();
         });
 
@@ -589,22 +843,21 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         clusterManager.getMarkerCollection().setOnInfoWindowClickListener(marker -> {
             Log.i(TAG, "triggered onInfoWindowClick");
             if (locationPermissionGranted) {
-                String waypoints = currentItem.getWaypoints();
                 LatLng position;
-                if (!waypoints.isEmpty()) {
-                    position = currentItem.getPositions().get(waypoints.split(",")[waypoints.split(",").length - 1].trim());
+                if (currentItem.getLastWaypoint() != null && !currentItem.getLastWaypoint().isEmpty()) {
+                    position = currentItem.getWaypoints().get(currentItem.getLastWaypoint());
                 } else {
                     position = marker.getPosition();
                 }
                 StringBuilder url = new StringBuilder(BranchDirectoryMap.DIR_URL);
                 url.append(position.latitude).append(",").append(position.longitude);
-                if (!routeMarkers.isEmpty() || currentItem.getWaypoints().split(",").length > 1) {
+                if (!routeMarkers.isEmpty() || currentItem.getWaypointsCount() > 1) {
                     StringBuilder params = waypointCombiner("|", true);
                     if (params.length() > 0) {
                         url.append(params);
                     }
                 }
-                Log.i(TAG, "url: " + url);
+//                Log.i(TAG, "url: " + url);
                 openMapsApp(Uri.parse(url.toString()));
             }
         });
@@ -641,7 +894,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         loadTextView.setVisibility(View.VISIBLE);
 
         varMapStr = getIntent().getStringExtra("places");
-        varMap = gson.fromJson(varMapStr, BranchDirectoryMap.VARMAP_TYPE);
+        varMap = BranchDirectoryMap.gson.fromJson(varMapStr, BranchDirectoryMap.VARMAP_TYPE);
 //        Log.i(TAG, "varMap from places: " + varMap);
 
         task = new MapLoaderTask(this);
@@ -669,24 +922,42 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             createMapStyles();
         } else {
             Log.i(TAG, "map id used: " + getString(R.string.map_id));
-            switchToggler(switchDark, false);
+            switchToggler(switchAlt, false);
             switchToggler(switchMono, false);
         }
         mMap.setTrafficEnabled(isTrafficEnabled);
-        mMap.setMapType(mapMode);
+        mMap.setMapType(mapMode + 1);
+
+        runWhenMapReady("setMapStyle", this::setMapStyle);
+        for (Runnable r : new ArrayList<>(afterMapReady)) r.run();
+        afterMapReady.clear();
+        afterMapReadyKeys.clear();
+
         Log.i(TAG, "reached end of onMapReady");
         clusterManager.cluster();
     }
 
-    private void performSearch(String query) {
-        MyItem correctSuggestion = null;
+    private void runWhenMapReady(String key, Runnable r) {
+        if (mapReady && mMap != null) {
+            r.run();
+        } else if (afterMapReadyKeys.add(key)) {
+            // only added if key wasn't present
+            afterMapReady.add(() -> {
+                try { r.run(); }
+                finally { afterMapReadyKeys.remove(key); } // clean up after running
+            });
+        }
+    }
+
+    public void performSearch(String query) {
+        CustomItem correctSuggestion = null;
         if (query.contains("+")) {      // chosen from suggestions list
             query = query.split("\\+", 2)[1].toLowerCase();
-            Log.i(TAG, "query 1: " + query);
-            for (MyItem suggestion : markers.get(currentTable)) {
+//            Log.i(TAG, "query 1: " + query);
+            for (CustomItem suggestion : markers.get(currentTable)) {
                 if (suggestion.getSnippet().toLowerCase().equals(query)) {
                     correctSuggestion = suggestion;
-                    Log.i(TAG, "case 1: " + suggestion.getSnippet());
+//                    Log.i(TAG, "case 1: " + suggestion.getSnippet());
                     break;
                 }
             }
@@ -711,6 +982,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
         if (correctSuggestion != null) {
             Log.i(TAG, "address found");
+            Log.i(TAG, "correctSuggestion: " + correctSuggestion);
+            Log.i(TAG, "currentTable: " + currentTable);
+            Log.i(TAG, "clusterItemMarkerMap: " + clusterItemMarkerMap);
             currentMarker = clusterItemMarkerMap.get(currentTable).get(correctSuggestion);
             if (currentMarker != null) {
                 startMarker();
@@ -722,97 +996,217 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
     }
 
-    private void updateSuggestions(String query) {
+    public void updateSuggestions(String query) {
+        Log.i(TAG, "query: " + query);
         filteredSuggestions.clear();
+        // search levels in order of importance: code, code with prefix, name, address
         for (int i = 0; i < BranchDirectoryMap.SEARCH_LEVELS; i++) {
             filteredSuggestions.add(new ArrayList<>());
         }
         if (!query.isEmpty()) {
             query = query.toLowerCase();
-            Log.i(TAG, "query: " + query);
-            for (MyItem suggestion : markers.get(currentTable)) {
-                boolean found = false;
-                // matches branch code
-                if (!((String) varMap.get(currentTable).get("code_prefix")).isEmpty()) {
-//                    Log.i(TAG, "code prefix: " + varMap.get(currentTable).get("code_prefix"));
-                    ArrayList<String> suggestionCodes = new ArrayList<>();
-                    String codeDelim = (String) varMap.get(currentTable).get("code_delimiter");
-                    if (codeDelim.isEmpty()) {
-                        suggestionCodes.add(suggestion.getCode());
-                    } else {
-                        suggestionCodes.addAll(Arrays.asList(suggestion.getCode().split((String) varMap.get(currentTable).get("code_delimiter"), 0)));
+            if (currentTable.equals(getString(R.string.header_all))) {
+                for (CustomItem suggestion : markers.get(currentTable)) {
+                    // match code
+                    String code = suggestion.getCode();
+                    if (code != null && code.toLowerCase().contains(query)) {
+                        filteredSuggestions.get(0).add(suggestion);
+                        continue;
                     }
-                    String prefix = ((String) varMap.get(currentTable).get("code_prefix")).toLowerCase();
-                    int prefixLen = prefix.length();
-                    int index = suggestionCodes.get(0).toLowerCase().indexOf(prefix);
-//                    Log.i(TAG, "sc: " + suggestionCodes.toString());
-//                    Log.i(TAG, "data: " + suggestionCodes.get(0).toLowerCase());
-//                    Log.i(TAG, "prefix: " + prefix + " prefixLen: " + prefixLen + " index: " + index);
-                    suggestionCodes.set(0, suggestionCodes.get(0).substring(index + prefixLen));
-                    for (String code : suggestionCodes) {
-                        code = code.toLowerCase();
-                        if (code.contains(prefix + query)) {
-//                            Log.i(TAG, "updatesuggestion case 1a code: " + code);
-                            filteredSuggestions.get(0).add(suggestion);
-                            found = true;
-                            break;
-                        } else if ((prefix + code).substring((prefix + code).length() - Math.min((prefix + code).length(), query.length())).contains(query)) {
-//                            Log.i(TAG, "updatesuggestion case 1b code: " + code);
-                            filteredSuggestions.get(0).add(suggestion);
-                            found = true;
-                            break;
-                        } else if (code.contains(query)) {
-//                            Log.i(TAG, "updatesuggestion case 2 code: " + code);
-                            filteredSuggestions.get(1).add(suggestion);
-                            found = true;
-                            break;
+                    // match name
+                    String name = suggestion.getName();
+                    if (name != null && name.toLowerCase().contains(query)) {
+                        filteredSuggestions.get(2).add(suggestion);
+                        continue;
+                    }
+                    // match address
+                    String addr = suggestion.getSnippet();
+                    if (addr != null && addr.toLowerCase().contains(query)) {
+                        filteredSuggestions.get(3).add(suggestion);
+                    }
+                }
+            } else {
+                String prefix = ((String) varMap.get(currentTable).get("code_prefix")).toLowerCase(Locale.ROOT);
+                String delim  = (String) varMap.get(currentTable).get("code_delimiter");
+                final String splitRegex = (delim == null || delim.isEmpty()) ? null : Pattern.quote(delim);
+                boolean queryHasPrefix = !prefix.isEmpty() && query.startsWith(prefix);
+                String qAfterPrefix = queryHasPrefix ? query.substring(prefix.length()) : "";
+                outer:
+                for (CustomItem suggestion : markers.get(currentTable)) {
+                    String codeRaw = suggestion.getCode();
+                    if (codeRaw != null && !codeRaw.isEmpty()) {
+                        List<String> tokens = (splitRegex == null)
+                                ? Collections.singletonList(codeRaw)
+                                : Arrays.asList(codeRaw.split(splitRegex, 0));
+                        if (queryHasPrefix && qAfterPrefix.length() > 0) {
+                            // match query with prefix
+                            for (String t : tokens) {
+                                String tl = t == null ? "" : t.trim().toLowerCase(Locale.ROOT);
+                                String suffix = tl.startsWith(prefix) ? tl.substring(prefix.length()) : tl;
+                                if (suffix.startsWith(qAfterPrefix)) {
+                                    filteredSuggestions.get(1).add(suggestion);
+                                    continue outer;
+                                }
+                            }
                         } else {
-                            index = query.indexOf(prefix);
-                            if (index != -1 && code.contains(query.substring(index + prefixLen))) {
-//                                Log.i(TAG, "updatesuggestion case 3 code: " + code);
-                                filteredSuggestions.get(1).add(suggestion);
-                                found = true;
-                                break;
+                            // match query without prefix
+                            for (String t : tokens) {
+                                String tl = t == null ? "" : t.trim().toLowerCase(Locale.ROOT);
+                                String suffix = tl.startsWith(prefix) ? tl.substring(prefix.length()) : tl;
+                                if (suffix.contains(query)) {
+                                    filteredSuggestions.get(0).add(suggestion);
+                                    continue outer;
+                                }
                             }
                         }
                     }
-                }
-                if (!found) {
-                    // matches branch name
-//                    Log.i(TAG, "branch name: " + suggestion.getName());
-                    if (suggestion.getName().toLowerCase().contains(query)) {
-//                        Log.i(TAG, "updatesuggestion case 4 name: " + suggestion.getName());
+
+                    // match name
+                    String name = suggestion.getName();
+                    if (name != null && name.toLowerCase(Locale.ROOT).contains(query)) {
                         filteredSuggestions.get(2).add(suggestion);
-                        // matches branch address
-                    } else if (suggestion.getSnippet().toLowerCase().contains(query)) {
-//                        Log.i(TAG, "updatesuggestion case 5 snippet: " + suggestion.getSnippet());
+                        continue; // skip address if name matched
+                    }
+
+                    // match address
+                    String addr = suggestion.getSnippet();
+                    if (addr != null && addr.toLowerCase(Locale.ROOT).contains(query)) {
                         filteredSuggestions.get(3).add(suggestion);
                     }
                 }
             }
-        } else {
-//            Log.i(TAG, "currentTable: " + currentTable);
-//            for (String key : markers.keySet()) {
-//                Log.i(TAG, "key: " + key);
-//                for (MyItem item : markers.get(key)) {
-//                    Log.i(TAG, "item: " + item);
-//                }
-//            }
+        } else {    // show all suggestions
+            Log.i(TAG, "currentTable: " + currentTable);
             filteredSuggestions.get(0).addAll(markers.get(currentTable));
         }
-//        Log.i(TAG, "suggestion size: " + filteredSuggestions.size());
         final MatrixCursor cursor = new MatrixCursor(new String[]{BaseColumns._ID, "location", "address"});
         for (int i = 0; i < BranchDirectoryMap.SEARCH_LEVELS; i++) {
             for (int j = 0; j < filteredSuggestions.get(i).size(); j++) {
-                MyItem suggestion = filteredSuggestions.get(i).get(j);
+                CustomItem suggestion = filteredSuggestions.get(i).get(j);
                 cursor.addRow(new Object[]{j, suggestion.getTitle(), suggestion.getSnippet()});
             }
         }
-//        Log.i(TAG, "cursor size: " + cursor.getCount());
-        suggestionAdapter.changeCursor(cursor);
+        Cursor old = suggestionAdapter.swapCursor(cursor);
+        if (old != null) old.close();
+//        suggestionAdapter.changeCursor(cursor);
     }
 
-    private void updateLocationUI() {
+    private void applySystemBars() {
+        @ColorInt int bg = ContextCompat.getColor(this, R.color.pri_text_low_alt);
+
+        Window window = getWindow();
+        View decor = window.getDecorView();
+
+        window.setStatusBarColor(bg);
+        if (Build.VERSION.SDK_INT >= 26) {
+            window.setNavigationBarColor(bg);
+        }
+
+        boolean lightBackground = isColorLight(bg);
+        WindowInsetsControllerCompat wic = new WindowInsetsControllerCompat(window, decor);
+        wic.setAppearanceLightStatusBars(lightBackground);
+        if (Build.VERSION.SDK_INT >= 26) {
+            wic.setAppearanceLightNavigationBars(lightBackground);
+        }
+    }
+
+    private boolean isColorLight(@ColorInt int c) {
+        int r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
+        double lum = (0.299*r + 0.587*g + 0.114*b) / 255d;
+        return lum >= 0.5;
+    }
+
+    private void startAmbientMonitoring() {
+        stopAmbientMonitoring();
+
+        sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+        lightSensor = (sensorManager != null) ? sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT) : null;
+        float darkOn, darkOff;
+        if (BranchDirectoryMap.LUX_OVERRIDES) {
+            darkOn = BranchDirectoryMap.LUX_DARK_ON;
+            darkOff = BranchDirectoryMap.LUX_DARK_OFF;
+        } else {
+            float max = (lightSensor != null ? lightSensor.getMaximumRange() : 40000f);
+            darkOn = Math.max(2f, 0.002f * max);
+            darkOff = darkOn * 2.0f;
+            Log.i(TAG, "lux max: " + max + " darkOn: " + darkOn + " darkOff: " + darkOff);
+        }
+
+        if (lightSensor != null) {
+            lightListener = new SensorEventListener() {
+                @Override public void onSensorChanged(SensorEvent event) {
+                    lastLux = event.values[0];
+                }
+                @Override public void onAccuracyChanged(Sensor sensor, int accuracy) {}
+            };
+            sensorManager.registerListener(lightListener, lightSensor, SensorManager.SENSOR_DELAY_NORMAL);
+        } else {
+            Log.e(TAG, "No ambient light sensor");
+            lastLux = Float.NaN;
+        }
+
+        ambientExecutor = Executors.newSingleThreadScheduledExecutor();
+        ambientFuture = ambientExecutor.scheduleWithFixedDelay(() -> {
+            try {
+                if (!isAmbientEnabled) return;
+
+                float lux = lastLux;
+
+                Log.i(TAG, "lux: " + lux);
+
+                if (Float.isNaN(lux)) return;
+
+                boolean shouldDark;
+                if (lastAppliedDark == null) {
+                    shouldDark = (lux < (darkOn + darkOff) / 2f);
+                } else if (lastAppliedDark) {   // currently dark
+                    shouldDark = (lux < darkOff);
+                } else {    // currently light
+                    shouldDark = (lux < darkOn);
+                }
+
+                if (lastAppliedDark == null || shouldDark != lastAppliedDark) {
+                    lastAppliedDark = shouldDark;
+                    runOnUiThread(() -> {
+                        searchView.setOnQueryTextListener(null);
+                        suppressQuery = true;
+                        isDarkEnabled = shouldDark;
+                        AppCompatDelegate.setDefaultNightMode(
+                                shouldDark ? AppCompatDelegate.MODE_NIGHT_YES : AppCompatDelegate.MODE_NIGHT_NO
+                        );
+                        getDelegate().applyDayNight();
+                        applySystemBars();
+                        setMapStyle();
+                        searchView.setOnQueryTextListener(queryListener);
+                        suppressQuery = false;
+                    });
+                }
+            } catch (Throwable t) {
+                Log.e(TAG, "Ambient monitor tick failed", t);
+            }
+        }, 0, BranchDirectoryMap.LUX_PING_SECONDS, TimeUnit.SECONDS);
+    }
+
+    private void stopAmbientMonitoring() {
+        if (sensorManager != null && lightListener != null) {
+            sensorManager.unregisterListener(lightListener);
+        }
+        lightListener = null;
+        lightSensor = null;
+
+        if (ambientFuture != null) {
+            ambientFuture.cancel(true);
+            ambientFuture = null;
+        }
+        if (ambientExecutor != null) {
+            ambientExecutor.shutdownNow();
+            ambientExecutor = null;
+        }
+        lastAppliedDark = null;
+        lastLux = Float.NaN;
+    }
+
+    public void updateLocationUI() {
         try {
             if (locationPermissionGranted) {
                 mMap.setMyLocationEnabled(true);
@@ -826,7 +1220,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
     }
 
-    private void openMapsApp(Uri uri) {
+    public void openMapsApp(Uri uri) {
         if (intermediates_count > BranchDirectoryMap.MAX_INTERMEDIATES_EXT) {
             Toast.makeText(this, getString(R.string.max_intermediates_ext), Toast.LENGTH_SHORT).show();
             return;
@@ -840,7 +1234,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
     }
 
-    private void moveButtonsWithMarker(Point screenPosition) {
+    public void moveButtonsWithMarker(Point screenPosition) {
         int x = screenPosition.x - markerButtonsLayout.getWidth() / 2;
         int y = screenPosition.y + 20;
 
@@ -850,21 +1244,29 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         markerButtonsLayout.setVisibility(View.VISIBLE);
     }
 
-    private void setMapStyle() {
+    public void setMapStyle() {
+        Log.i(TAG, "setMapStyle");
+        if (isAltEnabled) {
+            int styleKey = isDarkEnabled ? 5 : 4; // 5 = dark alt, 4 = light alt
+            mMap.setMapStyle(styles.get(stylesList.get(styleKey)));
+            clearMap();
+            return;
+        }
         int styleKey = (isDarkEnabled ? 1 : 0) + (isMonoEnabled ? 2 : 0);
-        Log.i(TAG, "setMapStyle: " + styleKey);
         switch (styleKey) {
-            case 0:
+            case 0:     // light
                 mMap.setMapStyle(styles.get(stylesList.get(0)));
                 break;
-            case 1:
+            case 1:     // dark
                 mMap.setMapStyle(styles.get(stylesList.get(1)));
                 break;
-            case 2:
+            case 2:     // light mono
                 mMap.setMapStyle(styles.get(stylesList.get(2)));
+                switchAlt.setChecked(false);
                 break;
-            case 3:
+            case 3:     // dark mono
                 mMap.setMapStyle(styles.get(stylesList.get(3)));
+                switchAlt.setChecked(false);
                 break;
             default:
                 Log.e(TAG, "invalid styleKey in setMapStyle");
@@ -873,7 +1275,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         clearMap();
     }
 
-    private void createMapStyles() {
+    public void createMapStyles() {
         Log.i(TAG, "createMapStyles");
         String[] stylesStr = BuildConfig.STYLE_JSON.split(",");
         stylesList = new ArrayList<>();
@@ -893,50 +1295,263 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 //        Log.i(TAG, "styles: " + styles.toString());
     }
 
-    private void menuToggler() {
+    public void setAppTheme(int theme, boolean setStyleToo) {
+        if (setStyleToo) {
+            searchView.setOnQueryTextListener(null);
+        }
+        suppressQuery = true;
+        switch (theme) {
+            case 0:     // system (default)
+                isAmbientEnabled = false;
+                stopAmbientMonitoring();
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
+                getDelegate().applyDayNight();
+                int nightMask = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+                isDarkEnabled = (nightMask == Configuration.UI_MODE_NIGHT_YES);
+                applySystemBars();
+                break;
+            case 1:     // light
+                isAmbientEnabled = false;
+                stopAmbientMonitoring();
+                isDarkEnabled = false;
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
+                getDelegate().applyDayNight();
+                applySystemBars();
+                break;
+            case 2:     // dark
+                isAmbientEnabled = false;
+                stopAmbientMonitoring();
+                isDarkEnabled = true;
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
+                getDelegate().applyDayNight();
+                applySystemBars();
+                break;
+            case 3:     // ambient light sensor
+                isAmbientEnabled = true;
+                startAmbientMonitoring();
+                break;
+            default:
+                Log.e(TAG, "unknown theme in themeSpinner");
+        }
+        if (setStyleToo) {
+            setMapStyle();
+            searchView.setOnQueryTextListener(queryListener);
+        }
+        suppressQuery = false;
+    }
+
+    private void restyleAfterThemeChange() {
+        Log.i(TAG, "restyleAfterThemeChange");
+
+        @ColorInt int fg = ContextCompat.getColor(this, R.color.pri_text_high);
+        @ColorInt int bg = ContextCompat.getColor(this, R.color.pri_text_low_alt);
+        ColorStateList bgList = ColorStateList.valueOf(bg);
+        ColorStateList fgList = ColorStateList.valueOf(fg);
+        Drawable popupBg = new ColorDrawable(ContextCompat.getColor(this, R.color.pri_text_medium_alt));
+
+        searchViewLayout.setBackgroundColor(bg);
+        int iconRes = isMenuActive ? R.drawable.ic_close : R.drawable.ic_menu;
+        Drawable icon = AppCompatResources.getDrawable(this, iconRes);
+        icon = icon.mutate();
+        DrawableCompat.setTint(icon, fg);
+        menuButton.setImageDrawable(icon);
+
+        AutoCompleteTextView acText = searchView.findViewById(androidx.appcompat.R.id.search_src_text);
+        if (acText != null) {
+            acText.setDropDownBackgroundDrawable(popupBg);
+            acText.setTextColor(fg);
+            acText.setHintTextColor(adjustAlpha(fg, 0.2f));
+        }
+
+        if (suggestionAdapter != null) {
+            final int mg = ContextCompat.getColor(this, R.color.pri_text_medium);
+            suggestionAdapter.setViewBinder((view, cursor, columnIndex) -> {
+                int id = view.getId();
+                if (id == R.id.suggestion_text) {
+                    ((TextView) view).setTextColor(fg);
+                    return false;
+                } else if (id == R.id.suggestion_description) {
+                    ((TextView) view).setTextColor(mg);
+                    return false;
+                }
+                return false;
+            });
+            suggestionAdapter.notifyDataSetChanged();
+        }
+
+        ImageView btn = searchView.findViewById(androidx.appcompat.R.id.search_button);
+        ImageView mag = searchView.findViewById(androidx.appcompat.R.id.search_mag_icon);
+        ImageView close = searchView.findViewById(androidx.appcompat.R.id.search_close_btn);
+        if (btn != null) ImageViewCompat.setImageTintList(btn, fgList);
+        if (mag != null) ImageViewCompat.setImageTintList(mag, fgList);
+        if (close != null) ImageViewCompat.setImageTintList(close, fgList);
+
+        searchSpinner.setPopupBackgroundDrawable(popupBg.getConstantState().newDrawable());
+        ViewCompat.setBackgroundTintList(searchSpinner, fgList);
+        SpinnerAdapter base = searchSpinner.getAdapter();
+        if (base instanceof SearchSpinnerAdapter) {
+            ((SearchSpinnerAdapter) base).updateTheme();
+        }
+
+        themeSpinner.setPopupBackgroundDrawable(popupBg.getConstantState().newDrawable());
+        trafficSpinner.setPopupBackgroundDrawable(popupBg.getConstantState().newDrawable());
+        appearanceSpinner.setPopupBackgroundDrawable(popupBg.getConstantState().newDrawable());
+
+        ViewCompat.setBackgroundTintList(themeSpinner, fgList);
+        ViewCompat.setBackgroundTintList(trafficSpinner, fgList);
+        ViewCompat.setBackgroundTintList(appearanceSpinner, fgList);
+
+        rethemeSpinner(themeSpinner);
+        forceSelectedTextColor(themeSpinner, fg);
+
+        rebuildSpinnerAdapter(trafficSpinner, BuildConfig.USE_ADVANCED_ROUTING
+                        ? R.array.traffic_adv_dropdown : R.array.traffic_dropdown,
+                R.layout.spinner_selected_item, android.R.layout.simple_spinner_dropdown_item);
+        rebuildSpinnerAdapter(appearanceSpinner, R.array.appearance_dropdown,
+                R.layout.spinner_selected_item, android.R.layout.simple_spinner_dropdown_item);
+
+        styleFab(directionsRouteButton, bgList, fgList);
+        styleFab(clearRouteButton, bgList, fgList);
+        styleFab(routeButton, bgList, fgList);
+        styleFab(layersButton, bgList, fgList);
+
+        styleMenuPanel(routeMenu, bg, fg, fgList);
+        styleMenuPanel(layersMenu, bg, fg, fgList);
+
+        tintMaterialSwitch(switchFerries, fg, bg);
+        tintMaterialSwitch(switchTolls, fg, bg);
+        tintMaterialSwitch(switchHighways, fg, bg);
+        tintMaterialSwitch(switchTraffic, fg, bg);
+        tintMaterialSwitch(switchAlt, fg, bg);
+        tintMaterialSwitch(switchMono, fg, bg);
+    }
+
+    private void styleFab(FloatingActionButton fab, ColorStateList bg, ColorStateList fg) {
+        fab.setBackgroundTintList(bg);
+        fab.setImageTintList(fg);
+        fab.refreshDrawableState();
+    }
+
+    private void styleMenuPanel(LinearLayout panel, @ColorInt int background, @ColorInt int text, ColorStateList iconTint) {
+        ViewCompat.setBackgroundTintList(panel, ColorStateList.valueOf(background));
+        ViewCompat.setBackgroundTintMode(panel, PorterDuff.Mode.SRC_IN);
+        tintChildrenForeground(panel, text);
+    }
+
+    private void tintChildrenForeground(View root, @ColorInt int textColor) {
+        if (!(root instanceof ViewGroup)) return;
+        ViewGroup vg = (ViewGroup) root;
+        for (int i = 0; i < vg.getChildCount(); i++) {
+            View child = vg.getChildAt(i);
+            if (child instanceof TextView && !(child instanceof CompoundButton)) {
+                ((TextView) child).setTextColor(textColor);
+            }
+            if (child instanceof ViewGroup) {
+                tintChildrenForeground(child, textColor);
+            }
+        }
+    }
+
+    private void rethemeSpinner(Spinner sp) {
+        SpinnerAdapter a = sp.getAdapter();
+        if (a instanceof ThemedSpinnerAdapter) {
+            ThemedSpinnerAdapter ta = (ThemedSpinnerAdapter) a;
+            ta.setDropDownViewTheme(getTheme());
+        }
+        if (a instanceof BaseAdapter) {
+            ((BaseAdapter) a).notifyDataSetChanged();
+        }
+    }
+
+    private void forceSelectedTextColor(Spinner sp, @ColorInt int color) {
+        View v = sp.getSelectedView();
+        if (v instanceof TextView) ((TextView) v).setTextColor(color);
+        sp.post(() -> {
+            View v2 = sp.getSelectedView();
+            if (v2 instanceof TextView) ((TextView) v2).setTextColor(color);
+        });
+    }
+
+    private void rebuildSpinnerAdapter(Spinner sp, @ArrayRes int entries, @LayoutRes int itemLayout, @LayoutRes int ddLayout) {
+        int sel = sp.getSelectedItemPosition();
+        ArrayAdapter<CharSequence> a =
+                ArrayAdapter.createFromResource(this, entries, itemLayout);
+        a.setDropDownViewResource(ddLayout);
+        sp.setAdapter(a);
+        if (sel >= 0 && sel < a.getCount()) sp.setSelection(sel, false);
+    }
+
+    private void tintMaterialSwitch(MaterialSwitch sw, @ColorInt int fg, @ColorInt int bg) {
+        if (sw == null) return;
+        final int[][] states = new int[][]{
+                new int[]{ android.R.attr.state_enabled,  android.R.attr.state_checked },
+                new int[]{ android.R.attr.state_enabled, -android.R.attr.state_checked },
+                new int[]{-android.R.attr.state_enabled,  android.R.attr.state_checked },
+                new int[]{-android.R.attr.state_enabled, -android.R.attr.state_checked }
+        };
+        final int[] thumbColors = new int[]{
+                fg,
+                adjustAlpha(fg, 0.54f),
+                adjustAlpha(fg, 0.38f),
+                adjustAlpha(fg, 0.24f)
+        };
+        final int[] trackColors = new int[]{
+                adjustAlpha(fg, 0.32f),
+                adjustAlpha(fg, 0.18f),
+                adjustAlpha(fg, 0.20f),
+                adjustAlpha(fg, 0.12f)
+        };
+        sw.setThumbTintList(new ColorStateList(states, thumbColors));
+        sw.setTrackTintList(new ColorStateList(states, trackColors));
+        sw.setTextColor(fg);
+    }
+
+    private static int adjustAlpha(int color, float alphaFraction) {
+        int a = Math.round(Color.alpha(color) * alphaFraction);
+        return Color.argb(a, Color.red(color), Color.green(color), Color.blue(color));
+    }
+
+    public void menuToggler() {
+        int iconRes = isMenuActive ? R.drawable.ic_menu : R.drawable.ic_close;
+        Drawable icon = AppCompatResources.getDrawable(this, iconRes);
+        icon = icon.mutate();
+        int color = ContextCompat.getColor(this, R.color.pri_text_high);
+        DrawableCompat.setTint(icon, color);
+        menuButton.setImageDrawable(icon);
         if (!isMenuActive) {
-            menuButton.setImageResource(R.drawable.ic_close);
             routeButton.setVisibility(View.VISIBLE);
             layersButton.setVisibility(View.VISIBLE);
-            searchView.closeKeyboard();
+            Log.i(TAG, "clearfocus 2");
             searchView.clearFocus();
             isMenuActive = true;
-            RelativeLayout.LayoutParams layoutparam = (RelativeLayout.LayoutParams) clearRouteButton.getLayoutParams();
-            layoutparam.removeRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
-            layoutparam.addRule(RelativeLayout.ABOVE, R.id.button_layers);
-            clearRouteButton.setLayoutParams(layoutparam);
         } else {
-            menuButton.setImageResource(R.drawable.ic_menu);
             routeButton.setVisibility(View.GONE);
             layersButton.setVisibility(View.GONE);
             routeMenu.setVisibility(View.GONE);
             layersMenu.setVisibility(View.GONE);
             isMenuActive = false;
-            RelativeLayout.LayoutParams layoutparam = (RelativeLayout.LayoutParams) clearRouteButton.getLayoutParams();
-            layoutparam.removeRule(RelativeLayout.ABOVE);
-            layoutparam.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
-            clearRouteButton.setLayoutParams(layoutparam);
         }
+        moveRouteButtons();
     }
 
-    private void switchToggler(SwitchCompat switchButton, boolean enabled) {
-        if (enabled){
+    public void switchToggler(MaterialSwitch switchButton, boolean enabled) {
+        if (enabled) {
             switchButton.setEnabled(true);
-            switchButton.setTextColor(Color.BLACK);
+            switchButton.setTextColor(ContextCompat.getColor(this, R.color.pri_text_high));
         } else {
             switchButton.setEnabled(false);
-            switchButton.setTextColor(Color.GRAY);
+            switchButton.setTextColor(ContextCompat.getColor(this, R.color.pri_text_medium));
         }
     }
 
-    private StringBuilder waypointCombiner(String delimiter, boolean cutbody) {
+    public StringBuilder waypointCombiner(String delimiter, boolean cutbody) {
         // cutbody is for app calls to restrict all marker waypoints to last one
         StringBuilder waypointsBuilder = new StringBuilder();
         Iterator<String> keyIterator = routeMarkers.keySet().iterator();
         // iterate through routeMarkers
         while (keyIterator.hasNext()) {
             String title = keyIterator.next();
-            MyItem thisItem = (MyItem) routeMarkers.get(title).get(1);
+            CustomItem thisItem = (CustomItem) routeMarkers.get(title).get(1);
             // no waypoints
             if (thisItem.getWaypoints().isEmpty()) {
                 Marker thisMarker = (Marker) routeMarkers.get(title).get(0);
@@ -954,10 +1569,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             } else {
                 Iterator<String> waypointIterator;
                 if (cutbody) {
-                    String lastWaypoint = thisItem.getWaypoints().split(",")[thisItem.getWaypoints().split(",").length - 1];
-                    waypointIterator = Collections.singletonList(lastWaypoint).iterator();
+                    waypointIterator = Collections.singletonList(thisItem.getLastWaypoint()).iterator();
                 } else {
-                    waypointIterator = Arrays.asList(thisItem.getWaypoints().split(",")).iterator();
+                    waypointIterator = thisItem.getWaypoints().keySet().iterator();
                 }
                 while (waypointIterator.hasNext()) {
                     String waypoint = waypointIterator.next();
@@ -968,7 +1582,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     if (waypointIterator.hasNext() && !cutbody) {
                         waypointsBuilder.append("via:");
                     }
-                    LatLng position = thisItem.getPositions().get(waypoint.trim());
+                    LatLng position = thisItem.getWaypoints().get(waypoint);
                     waypointsBuilder.append(position.latitude).append(",")
                             .append(position.longitude);
                 }
@@ -976,7 +1590,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
         // iterate through currentItem waypoints excluding last one which is destination
         if (!currentItem.getWaypoints().isEmpty()) {
-            List<String> waypoints = new ArrayList<>(Arrays.asList(currentItem.getWaypoints().split(",")));
+            List<String> waypoints = new ArrayList<>(currentItem.getWaypoints().keySet());
             if (cutbody) {
                 waypoints.subList(0, waypoints.size() - 1).clear();
             }
@@ -987,7 +1601,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 if (waypointsBuilder.length() > 0) {
                     waypointsBuilder.append("|");
                 }
-                LatLng position = currentItem.getPositions().get(waypoint.trim());
+                LatLng position = currentItem.getWaypoints().get(waypoint);
                 waypointsBuilder.append("via:").append(position.latitude).append(",")
                         .append(position.longitude);
             }
@@ -998,7 +1612,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         return waypointsBuilder;
     }
 
-    private void getCurrentLocation(LocationUpdateAction callback) {
+    public void getCurrentLocation(LocationUpdateAction callback) {
         LocationRequest locationRequest = LocationRequest.create();
         locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
         locationRequest.setInterval(5000);
@@ -1031,7 +1645,15 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
     }
 
-    private void startMarker() {
+    private static <K, V> K getLastKey (Map<K, V> map) {
+        K last = null;
+        for (K e : map.keySet()) {
+            last = e;
+        }
+        return last;
+    }
+
+    public void startMarker() {
         Log.i(TAG, "startMarker");
         if (currentMarker == null) {
             Log.i(TAG, "marker is null at startMarker");
@@ -1044,7 +1666,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             customAdapter.setTrafficText(new SpannableString("Loading..."));
         }
         redrawInfoWindow();
-        if ((Boolean) varMap.get(currentTable).get("use_phone") && !currentItem.getPhone().isEmpty()) {
+        if ((BuildConfig.SHOW_ALL_HEADER || (Boolean) varMap.get(currentTable).get("use_phone")) && !currentItem.getPhone().isEmpty()) {
             callMarkerButton.setVisibility(View.VISIBLE);
         } else {
             callMarkerButton.setVisibility(View.GONE);
@@ -1058,13 +1680,15 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             removeMarkerButton.setVisibility(View.GONE);
         }
         if (locationPermissionGranted) {
-            if (!currentItem.getWaypoints().isEmpty()) {
-                for (String waypoint : currentItem.getPositions().keySet()) {
+//            Log.i(TAG, "currentItem: " + BranchDirectoryMap.gson.toJson(currentItem, CustomItem.class));
+            Map<String, LatLng> waypoints = currentItem.getWaypoints();
+            if (!waypoints.isEmpty()) {
+                for (String waypoint : waypoints.keySet()) {
 //                    Log.i(TAG, "waypoint: " + waypoint);
 //                    Log.i(TAG, "name: " + currentItem.getTitle());
 //                    Log.i(TAG, "getWaypoints: " + currentItem.getWaypoints());
 //                    Log.i(TAG, "getPositions: " + currentItem.getPositions());
-                    Marker pos = mMap.addMarker(new MarkerOptions().position(currentItem.getPositions().get(waypoint))
+                    Marker pos = mMap.addMarker(new MarkerOptions().position(waypoints.get(waypoint))
                             .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ROSE)));
                     waypointList.add(pos);
                 }
@@ -1100,12 +1724,13 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             routeMarkers.put(currentMarker.getTitle(), new ArrayList<>());
             routeMarkers.get(currentMarker.getTitle()).add(currentMarker);
             routeMarkers.get(currentMarker.getTitle()).add(currentItem);
-            if (currentItem.getWaypoints().isEmpty()) {
+            Map<String, LatLng> waypoints = currentItem.getWaypoints();
+            if (waypoints.isEmpty()) {
                 routeMarkers.get(currentMarker.getTitle()).add(new LatLng(currentMarker.getPosition().latitude, currentMarker.getPosition().longitude));
                 intermediates_count++;
             } else {
-                for (String waypoint : currentItem.getWaypoints().split(",")) {
-                    routeMarkers.get(currentMarker.getTitle()).add(currentItem.getPositions().get(waypoint.trim()));
+                for (String waypoint : waypoints.keySet()) {
+                    routeMarkers.get(currentMarker.getTitle()).add(waypoints.get(waypoint));
                     intermediates_count++;
                 }
             }
@@ -1113,7 +1738,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             lastSelected = true;
             addMarkerButton.setVisibility(View.GONE);
             removeMarkerButton.setVisibility(View.VISIBLE);
-            clearRouteButton.setVisibility(View.VISIBLE);
+            moveRouteButtons();
             customRenderer.setShouldCluster(false);
             clusterManager.cluster();
         } else {
@@ -1130,7 +1755,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         addMarkerButton.setVisibility(View.VISIBLE);
         removeMarkerButton.setVisibility(View.GONE);
         if (routeMarkers.isEmpty()) {
-            clearRouteButton.setVisibility(View.GONE);
+            moveRouteButtons();
             customRenderer.setShouldCluster(true);
         } else {
             getCurrentLocation(this::GetInformationTaskCreator);
@@ -1143,7 +1768,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     public static <K, V> K getKeyByValue(Map<K, V> map, V value) {
         for (Map.Entry<K, V> entry : map.entrySet()) {
             if(Objects.equals(value, entry.getValue())) {
-                Log.i(TAG, "getKeyByValue: " + entry.getKey());
+//                Log.i(TAG, "getKeyByValue: " + entry.getKey());
                 return entry.getKey();
             }
         }
@@ -1151,30 +1776,107 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         return null;
     }
 
-    @Override
-    public void onBackPressed() {
-//        Log.i(TAG, "ONBACKPRESSED");
-        if (isInfoWindowOpen) {
-//            Log.i(TAG, "isInfoWindowOpen is true");
-            clearInfoWindow();
-//            Log.i(TAG, "isInfoWindowOpen is: " + isInfoWindowOpen);
-        } else if (routeMenu.getVisibility() == View.VISIBLE || layersMenu.getVisibility() == View.VISIBLE) {
-            clearMenus("");
-        } else if (isMenuActive) {
-            menuToggler();
-        } else {
+    private final OnBackPressedCallback backPressedCallback = new OnBackPressedCallback(true) {
+        @Override
+        public void handleOnBackPressed() {
+            Log.i(TAG, "handleOnBackPressed");
+
+            if (closeImeIfVisible()) return;
+            if (dismissSearchSuggestions()) return;
+            if (clearSearchFocusIfNeeded()) return;
+
+            if (isInfoWindowOpen) {
+                clearInfoWindow();
+                return;
+            }
+            if (routeMenu.getVisibility() == View.VISIBLE || layersMenu.getVisibility() == View.VISIBLE) {
+                clearMenus("");
+                return;
+            }
+            if (isMenuActive) {
+                menuToggler();
+                return;
+            }
+
             if (doubleBackToExitPressedOnce) {
-                super.onBackPressed();
-                task.cancel(true);
+                setEnabled(false);
+                getOnBackPressedDispatcher().onBackPressed();
+                if (task != null) task.cancel(true);
                 finishAffinity();
+                return;
             }
             doubleBackToExitPressedOnce = true;
-            Toast.makeText(this, getString(R.string.press_back), Toast.LENGTH_SHORT).show();
-            new Handler(Looper.getMainLooper()).postDelayed(() -> doubleBackToExitPressedOnce = false, 2000);
+            Toast.makeText(MapsActivity.this, getString(R.string.press_back), Toast.LENGTH_SHORT).show();
+            new Handler(Looper.getMainLooper()).postDelayed(
+                    () -> doubleBackToExitPressedOnce = false, 2000
+            );
+        }
+    };
+
+    private boolean closeImeIfVisible() {
+        View root = getWindow().getDecorView();
+        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(root);
+        boolean imeVisible = insets != null && insets.isVisible(WindowInsetsCompat.Type.ime());
+        Log.i(TAG, "closeImeIfVisible: " + imeVisible);
+        if (!imeVisible) return false;
+
+        InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+        View v = getCurrentFocus();
+        if (v == null) v = root;
+        if (imm != null) imm.hideSoftInputFromWindow(v.getWindowToken(), 0);
+        return true;
+    }
+
+    private boolean dismissSearchSuggestions() {
+        if (searchView == null) return false;
+        AutoCompleteTextView ac = searchView.findViewById(androidx.appcompat.R.id.search_src_text);
+        if (ac != null && ac.isPopupShowing()) {
+            ac.dismissDropDown();
+            return true;
+        }
+        return false;
+    }
+
+    private boolean clearSearchFocusIfNeeded() {
+        if (searchView != null && searchView.hasFocus()) {
+            searchView.clearFocus();
+            return true;
+        }
+        return false;
+    }
+
+
+    public void moveRouteButtons() {
+        if (!routeMarkers.isEmpty()) {
+//            Log.i(TAG, "moveRouteButtons 1");
+            clearRouteButtonParams.removeRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
+            clearRouteButtonParams.removeRule(RelativeLayout.ABOVE);
+            if (isMenuActive && layersMenu.getVisibility() == View.VISIBLE) {
+//                Log.i(TAG, "moveRouteButtons a");
+                clearRouteButtonParams.addRule(RelativeLayout.ABOVE, R.id.menu_layers);
+                clearRouteButton.requestLayout();
+                directionsRouteButton.requestLayout();
+            } else if (isMenuActive) {
+//                Log.i(TAG, "moveRouteButtons b");
+                clearRouteButtonParams.addRule(RelativeLayout.ABOVE, R.id.button_layers);
+                clearRouteButton.requestLayout();
+                directionsRouteButton.requestLayout();
+            } else {
+//                Log.i(TAG, "moveRouteButtons c");
+                clearRouteButtonParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
+                clearRouteButton.requestLayout();
+                directionsRouteButton.requestLayout();
+            }
+            directionsRouteButton.setVisibility(View.VISIBLE);
+            clearRouteButton.setVisibility(View.VISIBLE);
+        } else {
+//            Log.i(TAG, "moveRouteButtons 2");
+            directionsRouteButton.setVisibility(View.GONE);
+            clearRouteButton.setVisibility(View.GONE);
         }
     }
 
-    private void clearMenus(String side) {
+    public void clearMenus(String side) {
         Log.i(TAG, "clearMenus side: " + side);
         switch (side) {
             case "L":
@@ -1190,15 +1892,16 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
     }
 
-    private void hideMenu(View menu, View button) {
+    public void hideMenu(View menu, View button) {
         if (menu.getVisibility() == View.VISIBLE) {
             menu.startAnimation(animDisappear);
-            menu.setVisibility(View.GONE);
-            button.setVisibility(View.VISIBLE);
+            menu.setVisibility(View.INVISIBLE);
+            buttonToChange = button;
+            menuToChange = menu;
         }
     }
 
-    private void clearMap() {
+    public void clearMap() {
         Log.i(TAG, "clearMap");
         clearPolys();
 //        for (Marker marker : clusterManager.getMarkerCollection().getMarkers()) {
@@ -1236,12 +1939,12 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         Log.i(TAG, "clearRoute");
         clearMap();
         for (String title : routeMarkers.keySet()) {
-            MyItem item = (MyItem) routeMarkers.get(title).get(1);
+            CustomItem item = (CustomItem) routeMarkers.get(title).get(1);
             item.setSelected(-1);
         }
         routeMarkers.clear();
         intermediates_count = 0;
-        clearRouteButton.setVisibility(View.GONE);
+        moveRouteButtons();
         addMarkerButton.setVisibility(View.VISIBLE);
         removeMarkerButton.setVisibility(View.GONE);
         customRenderer.setShouldCluster(true);
@@ -1249,7 +1952,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         startMarker();
     }
 
-    private void clearPolys() {
+    public void clearPolys() {
         Log.i(TAG, "clearPolys");
         for (Polyline line : polylines) {
             line.remove();
@@ -1265,7 +1968,10 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 decodedPolyline.addAll(PolyUtil.decode(steps));
             }
         }
-        polylines.add(mMap.addPolyline(new PolylineOptions().addAll(decodedPolyline).color(Color.BLUE).width(20f).zIndex(1000)));
+        polylines.add(mMap.addPolyline(new PolylineOptions().addAll(decodedPolyline)
+                .color(Color.CYAN).width(20f).zIndex(1000)));
+        polylines.add(mMap.addPolyline(new PolylineOptions().addAll(decodedPolyline)
+                .color(isDarkEnabled ? Color.WHITE : Color.BLACK).width(24f).zIndex(900)));
     }
 
     @Override
@@ -1287,6 +1993,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             lastSelected = currentItem.getSelected() > -1;
             if (searchView.getQuery().length() != 0) {
                 searchView.setQuery("", false);
+                Log.i(TAG, "clearfocus 3");
                 searchView.clearFocus();
             }
             tempMarker = currentMarker;
@@ -1303,7 +2010,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         isInfoWindowRedraw = false;
     }
 
-    private int getMapSize(Map<String, List<MyItem>> map) {
+    public int getMapSize(Map<String, List<CustomItem>> map) {
         int markersSize = 0;
         for (String table : tables) {
             if (map.containsKey(table)) {
@@ -1313,7 +2020,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         return markersSize;
     }
 
-    private int getMapSize3D(Map<String, Map<String, Map<String, LatLng>>> map) {
+    public int getMapSize3D(Map<String, Map<String, Map<String, LatLng>>> map) {
         int markersSize = 0;
         for (String table : map.keySet()) {
             for (String name : map.get(table).keySet()) {
@@ -1323,10 +2030,16 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         return markersSize;
     }
 
-    public boolean mapHasInnerElements(Map<String, Map<String, List<String>>> map) {
-        for (String key : map.keySet()) {
-            if (!map.get(key).isEmpty()) {
+    public boolean mapHasInnerElements(Map<String, Map<String, List<String>>> map, boolean deeper) {
+        for (Map<String, List<String>> outermap : map.values()) {
+            if (!deeper && !outermap.isEmpty()) {
                 return true;
+            } else if (deeper) {
+                for (List<String> innerlist : outermap.values()) {
+                    if (!innerlist.isEmpty()) {
+                        return true;
+                    }
+                }
             }
         }
         return false;
@@ -1357,19 +2070,28 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         return copy;
     }
 
-    public void addToMap(Map<String, Map<String, Object>> outer, Map<String, List<MyItem>> inner) {
+    public static LinkedHashMap<String, ArrayList<Object>> deepCopyMap(Map<String, ArrayList<Object>> src) {
+        LinkedHashMap<String, ArrayList<Object>> out = new LinkedHashMap<>(src.size());
+        for (Map.Entry<String, ArrayList<Object>> e : src.entrySet()) {
+            ArrayList<Object> v = e.getValue();
+            out.put(e.getKey(), v == null ? null : new ArrayList<>(v));
+        }
+        return out;
+    }
+
+    public void addToMap(Map<String, Map<String, Object>> outer, Map<String, List<CustomItem>> inner) {
         for (String table : inner.keySet()) {
             if (outer.containsKey(table)) {
 //                Log.i(TAG, "outer table: " + outer.get(table));
 //                Log.i(TAG, "inner table: " + inner.get(table));
                 ArrayList<String> outerList = (ArrayList<String>) outer.get(table).get("array");
-                for (MyItem item : inner.get(table)) {
+                for (CustomItem item : inner.get(table)) {
                     List<String> newItem = Arrays.asList(item.getTitle(), item.getSnippet(), item.getRefined(), item.getPhone(), item.getColour());
 //                    Log.i(TAG, "to be added: " + item.getTitle() + ", " + item.getSnippet() + ", " + item.getRefined() + ", " + item.getPhone());
                     int matchIndex = outerList.indexOf(item.getTitle());
                     if (matchIndex > -1) {
 //                        Log.i(TAG, "match index: " + matchIndex + " item: " + item.getTitle());
-                        outerList.subList(matchIndex, matchIndex + BranchDirectoryMap.NUM_OF_MYITEM_VARS).clear();
+                        outerList.subList(matchIndex, matchIndex + BranchDirectoryMap.NUM_OF_CUSTOMITEM_VARS).clear();
                         outerList.addAll(matchIndex, newItem);
                     } else {
                         outerList.addAll(newItem);
@@ -1404,43 +2126,61 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
     }
 
+    private void showAvoidanceViolationToast(int violated) {
+        if (violated == 0) return;
+
+        List<String> parts = new ArrayList<>(3);
+        if ((violated & VIOLATION_TOLLS) != 0)    parts.add(getString(R.string.tolls));
+        if ((violated & VIOLATION_FERRIES) != 0)  parts.add(getString(R.string.ferries));
+        if ((violated & VIOLATION_HIGHWAYS) != 0) parts.add(getString(R.string.highways));
+
+        String msg;
+        if (parts.size() == 1) {
+            msg = getString(R.string.couldnt_avoid_one, parts.get(0));
+        } else if (parts.size() == 2) {
+            msg = getString(R.string.couldnt_avoid_two, parts.get(0), parts.get(1));
+        } else {
+            msg = getString(R.string.couldnt_avoid_three, parts.get(0), parts.get(1), parts.get(2));
+        }
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
+    }
+
     // does not work, FIX THIS
     @Override
-    protected void onSaveInstanceState(Bundle outState) {
+    protected void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
-
         Log.i(TAG, "onSaveInstanceState");
-
-//        outState.putSerializable("markers", (Serializable) markers);
-//        outState.putString("currentTable", currentTable);
-
-        clearMenus("");
-        clearMap();
     }
 
     // does not work, FIX THIS
     @Override
-    protected void onRestoreInstanceState(Bundle savedInstanceState) {
+    protected void onRestoreInstanceState(@NonNull Bundle savedInstanceState) {
         super.onRestoreInstanceState(savedInstanceState);
-
         Log.i(TAG, "onRestoreInstanceState");
-
-//        if (savedInstanceState != null) {
-//            markers = (Map<String, List<MyItem>>) savedInstanceState.getSerializable("markers");
-//            currentTable = savedInstanceState.getString("currentTable");
-//        }
     }
 
-    private class CustomClusterRenderer extends DefaultClusterRenderer<MyItem> {
+    @Override
+    public void onConfigurationChanged(@NonNull Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        Log.i(TAG, "onConfigurationChanged");
+        getDelegate().applyDayNight();
+        invalidateOptionsMenu();
+        applySystemBars();
+        runWhenMapReady("restyleAfterThemeChange", this::restyleAfterThemeChange);
+        runWhenMapReady("setMapStyle", this::setMapStyle);
+    }
+
+    public class CustomClusterRenderer extends DefaultClusterRenderer<CustomItem> {
+
         private boolean shouldCluster = true;
 
-        public CustomClusterRenderer(Context context, GoogleMap map, ClusterManager<MyItem> clusterManager) {
+        public CustomClusterRenderer(Context context, GoogleMap map, ClusterManager<CustomItem> clusterManager) {
             super(context, map, clusterManager);
 //            setMinClusterSize(BuildConfig.MIN_CLUSTER_SIZE);
         }
 
         @Override
-        protected void onBeforeClusterItemRendered(MyItem item, MarkerOptions markerOptions) {
+        protected void onBeforeClusterItemRendered(CustomItem item, MarkerOptions markerOptions) {
 //            Log.i(TAG, "onBeforeClusterItemRendered");
             markerOptions.title(item.getTitle()).snippet(item.getSnippet());
             markerOptions.icon(BitmapDescriptorFactory.defaultMarker(item.getHue()));
@@ -1448,21 +2188,22 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
 
         @Override
-        protected void onClusterItemRendered(MyItem item, Marker marker) {
+        protected void onClusterItemRendered(CustomItem item, Marker marker) {
+//            Log.i(TAG, "triggered onClusterItemRendered");
             clusterItemMarkerMap.get(currentTable).put(item, marker);
             marker.setTag(item);
             super.onClusterItemRendered(item, marker);
         }
 
         @Override
-        protected void onClusterItemUpdated(@NonNull MyItem item, @NonNull Marker marker) {
+        protected void onClusterItemUpdated(@NonNull CustomItem item, @NonNull Marker marker) {
 //            Log.i(TAG, "onClusterItemUpdated");
             marker.setIcon(BitmapDescriptorFactory.defaultMarker(item.getHue()));
             super.onClusterItemUpdated(item, marker);
         }
 
         @Override
-        protected boolean shouldRenderAsCluster(Cluster<MyItem> cluster) {
+        protected boolean shouldRenderAsCluster(Cluster<CustomItem> cluster) {
             if (shouldCluster) {
                 return cluster.getSize() >= BuildConfig.MIN_CLUSTER_SIZE;
             } else {
@@ -1475,7 +2216,43 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
     }
 
-    private class MapLoaderTask extends AsyncTask<ArrayList<String>, Void, Void> {
+    public abstract class MapMerger<K, V> {
+
+        public Map<K, V> merge(Map<K, V> map1, Map<K, V> map2) {
+            Set<K> allKeys = new LinkedHashSet<>(map1.keySet());
+            allKeys.addAll(map2.keySet());
+            Map<K, V> merged = new LinkedHashMap<>();
+            for (K key : allKeys) {
+                V v1 = map1.get(key);
+                V v2 = map2.get(key);
+                merged.put(key, mergeValues(v1, v2));
+            }
+            return merged;
+        }
+
+        protected abstract V mergeValues(V v1, V v2);
+    }
+
+    public class LatLngMerger extends MapMerger<String, LatLng> {
+
+        @Override
+        protected LatLng mergeValues(LatLng v1, LatLng v2) {
+            return v1 != null ? v1 : v2;
+        }
+    }
+
+    public class CustomItemListMerger extends MapMerger<String, List<CustomItem>> {
+
+        @Override
+        protected List<CustomItem> mergeValues(List<CustomItem> list1, List<CustomItem> list2) {
+            Set<CustomItem> combined = new LinkedHashSet<>();
+            if (list1 != null) combined.addAll(list1);
+            if (list2 != null) combined.addAll(list2);
+            return new ArrayList<>(combined);
+        }
+    }
+
+    public class MapLoaderTask extends AsyncTask<ArrayList<String>, Void, Void> {
 
         private final Context context;
         private final boolean databaseExists;
@@ -1487,7 +2264,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         private Map<String, Map<String, List<String>>> waypointMaps = new HashMap<>();
         private Map<String, Map<String, List<String>>> missingWaypointMaps = new HashMap<>();
         private Map<String, Map<String, Map<String, LatLng>>> waypointValues = new HashMap<>();
-        private final Gson gson = new Gson();
         private final LatLngTracker tracker = new LatLngTracker();
 
         public MapLoaderTask(Context context) {
@@ -1522,9 +2298,11 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     Log.i(TAG, "table: " + table);
                     if (tablesSet.add(table)) {
                         tables.add(table);
+                    } else {
+                        Log.i(TAG, "table already added: " + table);
                     }
 //                    Log.i(TAG, "place: " + place.toString());
-                    for (int i = 0; i < place.size(); i += BranchDirectoryMap.NUM_OF_MYITEM_VARS) {
+                    for (int i = 0; i < place.size(); i += BranchDirectoryMap.NUM_OF_CUSTOMITEM_VARS) {
                         if ((Boolean) varMap.get(table).get("use_refined")) {
                             // contains a plus code
                             if (place.get(i + 2).contains("+")) {
@@ -1557,22 +2335,25 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     }
                 }
             }
+
             Log.i(TAG, "latchcount 1: " + latchCount);
 //            Log.i(TAG, "geocoderMaps: " + geocoderMaps.toString());
 
 
             Type mapType = new TypeToken<Map<String, Map<String, List<String>>>>() {}.getType();
             if (sharedPreferences.contains(BranchDirectoryMap.KEY_LOAD_REDO)) {
-                missingMaps = gson.fromJson(sharedPreferences.getString(BranchDirectoryMap.KEY_LOAD_REDO, ""), mapType);
+                missingMaps = BranchDirectoryMap.gson.fromJson(sharedPreferences.getString(BranchDirectoryMap.KEY_LOAD_REDO, ""), mapType);
+//                Log.i(TAG, "missingMaps: " + missingMaps.toString());
                 for (String table : missingMaps.keySet()) {
                     latchCount += missingMaps.get(table).size();
                 }
             }
             if (sharedPreferences.contains(BranchDirectoryMap.KEY_LOAD_REDO_WAYPOINT)) {
-                missingWaypointMaps = gson.fromJson(sharedPreferences.getString(BranchDirectoryMap.KEY_LOAD_REDO_WAYPOINT, ""), mapType);
+                missingWaypointMaps = BranchDirectoryMap.gson.fromJson(sharedPreferences.getString(BranchDirectoryMap.KEY_LOAD_REDO_WAYPOINT, ""), mapType);
+//                Log.i(TAG, "missingWaypointMaps: " + missingWaypointMaps.toString());
                 for (String table : missingWaypointMaps.keySet()) {
                     for (String name : missingWaypointMaps.get(table).keySet()) {
-                        latchCount += missingMaps.get(table).get(name).size();
+                        latchCount += missingWaypointMaps.get(table).get(name).size();
                     }
                 }
             }
@@ -1583,7 +2364,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 Log.i(TAG, "database does not exist");
             } else {
                 varMapStr = dbHelper.getVarMapStr(false);
-                varMap = gson.fromJson(varMapStr, BranchDirectoryMap.VARMAP_TYPE);
+                varMap = BranchDirectoryMap.gson.fromJson(varMapStr, BranchDirectoryMap.VARMAP_TYPE);
 //                Log.i(TAG, "new markers: " + markers.toString());
 //                Log.i(TAG, "varMap 1: " + varMap);
                 for (String table : varMap.keySet()) {
@@ -1591,6 +2372,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 //                    Log.i(TAG, "table 2: " + table);
                     if (tablesSet.add(table)) {
                         tables.add(table);
+                    } else {
+                        Log.i(TAG, "table already added: " + table);
                     }
                 }
                 Log.i(TAG, "return size: " + getMapSize(markers));
@@ -1598,7 +2381,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
             latch = new CountDownLatch(latchCount);
 
-            if (mapHasInnerElements(missingMaps)) {
+            if (mapHasInnerElements(missingMaps, false)) {
                 Log.i(TAG, "missingMaps loaded to geocoderMaps");
                 geocoderMaps = deepCopy3d(missingMaps);
                 missingMaps.clear();
@@ -1614,44 +2397,23 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     String address = geocoderMap.get(name).get(0);
                     values.put(table, Collections.synchronizedList(new ArrayList<>()));
                     markers.put(table, Collections.synchronizedList(new ArrayList<>()));
-                    if (databaseExists) {
-                        ArrayList<String> entry = (ArrayList<String>) varMap.get(table).get("array");
-                        if (entry != null) {
-                            List<String> geocoderData = geocoderMap.get(name);
-                            if (geocoderData != null) {
-                                ArrayList<String> subList = new ArrayList<>(Arrays.asList(name, geocoderData.get(1), geocoderData.get(2)));
-                                Log.i(TAG, "entry: " + entry);
-                                Log.i(TAG, "geocoderData: " + geocoderData);
-                                Log.i(TAG, "subList: " + subList);
-                                int startIndex = Collections.indexOfSubList(entry, subList);
-                                if (startIndex != -1) {
-                                    address = "";
-                                    subList.add(geocoderData.get(3));
-                                    startIndex = Collections.indexOfSubList(entry, subList);
-                                    if (startIndex != -1) {
-                                        Log.i(TAG, "entry skipped");
-//                                        Log.i(TAG, "   geocoderData: " + geocoderData);
-                                        latch.countDown();
-                                        continue;
-                                    } else {
-                                        Log.i(TAG, "entry address match: " + subList);
-                                        populateMaps(table, name, delim, 1000, 1000);
-                                    }
-                                } else {
-                                    Log.i(TAG, "entry not found: " + subList);
-                                }
-                            }
-                        }
-                    }
                     StringBuilder finalAddress = new StringBuilder(address);
                     String geoRegion = (String) varMap.get(table).get("geocode_region");
                     if (!address.contains("+") && !geoRegion.isEmpty()) {
                         finalAddress.append(", " + geoRegion);
                     }
 //                    Log.i(TAG, "finalAddress: " + finalAddress);
+
+                    boolean randomFail;
+                    if (BranchDirectoryMap.FORCED_FAIL && random.nextInt(100) >= BranchDirectoryMap.PASS_PERCENT) {
+                        randomFail = true;
+                    } else {
+                        randomFail = false;
+                    }
+
                     executor.submit(() -> {
                         try {
-                            if (finalAddress.length() != 0) {
+                            if (finalAddress.length() != 0 && !randomFail) {
                                 service.getGeocode(finalAddress.toString(), linkApiKey).enqueue(new Callback<>() {
                                     @Override
                                     public void onResponse(Call<GeocodingResponse> call, retrofit2.Response<GeocodingResponse> response) {
@@ -1682,7 +2444,13 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                                     }
                                 });
                             } else {
-                                Log.i(TAG, "No address found for: " + name + ", this is unexpected");
+                                if (!randomFail) {
+                                    Log.i(TAG, "No address found for: " + name + ", this is unexpected");
+                                } else {
+                                    Log.i(TAG, "Geocode request forced to fail: " + finalAddress);
+                                    missingMaps.get(table).put(name, geocoderMap.get(name));
+                                    latch.countDown();
+                                }
                             }
                             long sleepTime = BuildConfig.BASE_DELAY_MS + random.nextInt(BuildConfig.RANDOM_DELAY_MS + 1);
                             TimeUnit.MILLISECONDS.sleep(sleepTime);
@@ -1692,7 +2460,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     });
                 }
             }
-            if (mapHasInnerElements(missingWaypointMaps)) {
+            if (mapHasInnerElements(missingWaypointMaps, true)) {
+                Log.i(TAG, "missingWaypointMaps loaded to waypointMaps");
                 waypointMaps = deepCopy3d(missingWaypointMaps);
                 missingWaypointMaps.clear();
                 missingWaypointMaps = new HashMap<>();
@@ -1705,7 +2474,14 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     missingWaypointMaps.put(table, new HashMap<>());
                     for (String name : waypointMap.keySet()) {
                         waypointValues.get(table).put(name, new HashMap<>());
+                        missingWaypointMaps.get(table).put(name, new ArrayList<>());
                         for (String pluscode : waypointMap.get(name)) {
+                            if (BranchDirectoryMap.FORCED_FAIL && random.nextInt(100) >= 75) {
+                                Log.i(TAG, "Geocode request forced to fail for waypoint: " + name +", " + pluscode);
+                                missingWaypointMaps.get(table).get(name).add(pluscode);
+                                latch.countDown();
+                                continue;
+                            }
                             executor.submit(() -> {
                                 try {
                                     service.getGeocode(pluscode, linkApiKey).enqueue(new Callback<>() {
@@ -1747,52 +2523,96 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 Thread.currentThread().interrupt();
             }
             linkApiKey = null;
-            Log.i(TAG, "markers size: " + getMapSize(markers));
-            Log.i(TAG, "latchCount: " + latchCount);
-            if (getMapSize(markers) > 0) {
+
+            for (String table : waypointMaps.keySet()) {
+//                Log.i(TAG, "table: " + table);
+                for (String name : waypointMaps.get(table).keySet()) {
+//                    Log.i(TAG, "name: " + name);
+                    if (missingMaps.containsKey(table) && missingMaps.get(table).containsKey(name)) {
+                        Log.i(TAG, "waypointMaps contains orphaned entry: " + table + ", " + name
+                                + ", will be moved to missingWaypointMaps");
+                        if (!missingWaypointMaps.containsKey(table)) {
+                            missingWaypointMaps.put(table, new HashMap<>());
+                        }
+                        missingWaypointMaps.get(table).put(name, waypointMaps.get(table).get(name));
+                    }
+                }
+            }
+
+            Map<String, List<CustomItem>> oldMarkers = dbHelper.getAllLocations(db);
+            int mapsize = getMapSize(markers);
+            Log.i(TAG, "markers size prior: " + mapsize);
+            if (!oldMarkers.isEmpty()) {
+                CustomItemListMerger merger = new CustomItemListMerger();
+                markers = merger.merge(markers, oldMarkers);
+            }
+            mapsize = getMapSize(markers);
+            if (mapsize > 0) {
                 addToMap(varMap, markers);
             }
             if (getMapSize3D(waypointValues) > 0) {
                 addToMapWaypoints(varMap, waypointValues);
+//                applyWaypoints(markers, waypointValues);
             }
-            if (mapHasInnerElements(missingMaps)) {
-                Log.i(TAG, "missingMaps: " + missingMaps.toString());
-            }
-            if (mapHasInnerElements(missingWaypointMaps)) {
-                Log.i(TAG, "missingWaypointMaps: " + missingWaypointMaps.toString());
-            }
-//            if (latchCount > getMapSize(markers)) {
-//                Log.i(TAG, "latchCount > getMapSize(markers), FIX THIS");
+//            if (mapHasInnerElements(missingMaps, false)) {
+//                Log.i(TAG, "missingMaps: " + missingMaps.toString());
 //            }
+//            if (mapHasInnerElements(missingWaypointMaps, true)) {
+//                Log.i(TAG, "missingWaypointMaps: " + missingWaypointMaps.toString());
+//            }
+            Log.i(TAG, "markers size: " + mapsize);
+            Log.i(TAG, "waypointValues size: " + getMapSize3D(waypointValues));
+            Log.i(TAG, "latchCount: " + latchCount);
+
             return null;
         }
 
         @Override
         protected void onPostExecute(Void v) {
             Log.i(TAG, "Elapsed time doInBackground: " + (System.currentTimeMillis() - start));
-            if (mapHasInnerElements(missingMaps)) {
+            boolean mapsMissing = mapHasInnerElements(missingMaps, false);
+            boolean waypointsMissing = mapHasInnerElements(missingWaypointMaps, true);
+            if (mapsMissing || waypointsMissing) {
                 editor.putBoolean(BranchDirectoryMap.KEY_LOAD_FINISHED, false).apply();
                 Log.i(TAG, "tables: " + tables.toString());
-                for (String table : missingMaps.keySet()) {
-                    for (String title : missingMaps.get(table).keySet()) {
-                        Log.i(TAG, "marker not found: " + title + " in table: " + table);
-                        Log.i(TAG, "data: " + missingMaps.get(table).get(title).toString());
-                    }
-                }
 
                 dialogUtils.showOkDialog(context, getString(R.string.warning), getString(R.string.marker_error),
                         (dialog, id) -> dialog.dismiss());
 
-                String jsonString = gson.toJson(missingMaps);
-//                Log.i(TAG, "jsonString: " + jsonString);
-                editor.putString(BranchDirectoryMap.KEY_LOAD_REDO, jsonString).apply();
+                String jsonString;
+                if (mapsMissing) {
+                    for (String table : missingMaps.keySet()) {
+                        for (String title : missingMaps.get(table).keySet()) {
+                            Log.i(TAG, "marker not found: " + title + " in table: " + table);
+                            Log.i(TAG, "data: " + missingMaps.get(table).get(title).toString());
+                        }
+                    }
+                    jsonString = BranchDirectoryMap.gson.toJson(missingMaps);
+                    editor.putString(BranchDirectoryMap.KEY_LOAD_REDO, jsonString).apply();
+                }
+                if (waypointsMissing) {
+                    for (String table : missingWaypointMaps.keySet()) {
+                        for (String title : missingWaypointMaps.get(table).keySet()) {
+                            if (!missingWaypointMaps.get(table).get(title).isEmpty()) {
+                                Log.i(TAG, "waypoint not found: " + title + " in table: " + table);
+                                Log.i(TAG, "data: " + missingWaypointMaps.get(table).get(title).toString());
+                            }
+                        }
+                    }
+                    jsonString = BranchDirectoryMap.gson.toJson(missingWaypointMaps);
+                    editor.putString(BranchDirectoryMap.KEY_LOAD_REDO_WAYPOINT, jsonString).apply();
+                }
             } else {
                 editor.remove(BranchDirectoryMap.KEY_LOAD_REDO);
+                editor.remove(BranchDirectoryMap.KEY_LOAD_REDO_WAYPOINT);
                 editor.putBoolean(BranchDirectoryMap.KEY_LOAD_FINISHED, true).apply();
             }
 
             Collections.sort(tables);
             searchAdapter.notifyDataSetChanged();
+            if (db == null || !db.isOpen()) {
+                db = dbHelper.getWritableDatabase();
+            }
             db.beginTransaction();
             try {
                 for (String table : tables) {
@@ -1814,16 +2634,15 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         }
                     }
                 }
-                markers = dbHelper.getAllLocations(db);
                 dbHelper.deleteTable(db, "varmap");
-                dbHelper.createTable(db, "varMap.create");  // special command for varmap specifically
-                String jsonString = gson.toJson(varMap);
+                dbHelper.createTable(db, "varMap.create");  // special command for varMap specifically
+                String jsonString = BranchDirectoryMap.gson.toJson(varMap);
                 ContentValues varMapStrValues = new ContentValues();
                 varMapStrValues.put("string", jsonString);
                 db.insert("varmap", null, varMapStrValues);
                 db.setTransactionSuccessful();
             } catch (Exception e) {
-                Log.e(TAG, "--EXCEPTION-- " + e.getMessage());
+                e.printStackTrace();    // FIX THIS: add logging
             } finally {
                 db.endTransaction();
                 db.close();
@@ -1832,8 +2651,25 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     && sharedPreferences.getBoolean(BranchDirectoryMap.KEY_LOAD_FINISHED, false)) {
                 dbHelper.exportDatabase(BuildConfig.DATABASE_NAME);
             }
+            Log.i(TAG, "tables being added: " + tables);
             for (String table : tables) {
                 clusterItemMarkerMap.put(table, new HashMap<>());
+            }
+            if (BuildConfig.SHOW_ALL_HEADER) {
+                clusterItemMarkerMap.put(getString(R.string.header_all), new HashMap<>());
+                markers.put(getString(R.string.header_all), Collections.synchronizedList(new ArrayList<>()));
+
+                List<CustomItem> all = new ArrayList<>();
+                for (Map.Entry<String, List<CustomItem>> e : markers.entrySet()) {
+                    if (getString(R.string.header_all).equals(e.getKey())) continue;
+                    List<CustomItem> list = e.getValue();
+                    if (list != null) {
+                        for (CustomItem item : list) {
+                            if (item != null) all.add(item);
+                        }
+                    }
+                }
+                markers.put(getString(R.string.header_all), all);
             }
             if (!BuildConfig.DEFAULT_FILE.isEmpty()) {
                 currentTable = BuildConfig.DEFAULT_FILE.substring(0,
@@ -1841,10 +2677,11 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             } else {
                 currentTable = tables.get(0);
             }
-            int position = Collections.binarySearch(tables, currentTable);
+            int position = Collections.binarySearch(tables, currentTable) + 1;
             searchSpinner.setSelection(position);
             searchAdapter.setSelectedItemPosition(position);
-            for (MyItem marker : MyItem.MyItemSorter.sortMyItemsByCode(markers.get(currentTable))) {
+            CustomItem.CustomItemSorter.sortAllListsByCode(markers);
+            for (CustomItem marker : markers.get(currentTable)) {
                 clusterManager.addItem(marker);
             }
 
@@ -1856,7 +2693,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             Toast.makeText(context, getString(R.string.finished), Toast.LENGTH_SHORT).show();
         }
 
-        private void removeFromVarMap(String table, String name) {
+        public void removeFromVarMap(String table, String name) {
 //            Log.i(TAG, "removeFromVarMap table: " + table + ", name: " + name);
             if (!varMap.containsKey(table)) {
                 Log.i(TAG, "varMap doesn't contain table " + table);
@@ -1866,31 +2703,32 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 Log.i(TAG, "varMap table " + table + " doesn't contain an array");
             }
             ArrayList<String> markerList = (ArrayList<String>) varMap.get(table).get("array");
-            for (int i = 0; i < markerList.size(); i += BranchDirectoryMap.NUM_OF_MYITEM_VARS) {
+            for (int i = 0; i < markerList.size(); i += BranchDirectoryMap.NUM_OF_CUSTOMITEM_VARS) {
                 if (markerList.get(i).equals(name)) {
 //                    Log.i(TAG, "removing marker: " + name + " from table: " + table);
-                    markerList.subList(i, i + BranchDirectoryMap.NUM_OF_MYITEM_VARS).clear();
+                    markerList.subList(i, i + BranchDirectoryMap.NUM_OF_CUSTOMITEM_VARS).clear();
 //                    Log.i(TAG, "new varMap(" + table + ") array: " + markerList);
                     return;
                 }
             }
         }
 
-        private void populateMaps(String table, String name, String delim, double latitude, double longitude) {
-//            Log.i(TAG, "populateMaps: " + table + ", " + name + ", " + delim + ", " + latitude + ", " + longitude);
+        public void populateMaps(String table, String name, String delim, double latitude, double longitude) {
             Map<String, List<String>> geocoderMap = geocoderMaps.get(table);
-//            Log.i(TAG, "geocoderMap: " + geocoderMap);
-            String nameCode = delim.isEmpty() ? "" : name.split(delim, 2)[0];
-            String nameSnippet = "";
-            if (name.split(delim, 2).length > 1) {
-                nameSnippet = delim.isEmpty() ? name : name.split(delim, 2)[1];
-            }
-//            Log.i(TAG, "get(2): " + geocoderMap.get(name).get(2));
             String waypoints = geocoderMap.get(name).get(2).split("\\+").length > 2
                     ? geocoderMap.get(name).get(2) : "";
+            String[] nameParsed = parse(name, delim, (String) varMap.get(table).get("code_prefix"), (boolean) varMap.get(table).get("name_first"));
+            String nameSnippet = nameParsed[0] == null ? "" : nameParsed[0];
+            String nameCode = nameParsed[1] == null ? "" : nameParsed[1];
+            String json;
+            Map<String, LatLng> map = new LinkedHashMap<>();
             if (!waypoints.isEmpty()) {
                 waypoints = waypoints.substring(0, waypoints.lastIndexOf(","));
+                for (String waypoint : waypoints.split(",")) {
+                    map.put(waypoint, null);
+                }
             }
+            json = BranchDirectoryMap.gson.toJson(map, BranchDirectoryMap.WAYPOINTS_TYPE);
             ContentValues value = new ContentValues();
             value.put("latitude", latitude);
             value.put("longitude", longitude);
@@ -1898,16 +2736,18 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             value.put("name", nameSnippet);
             value.put("address", geocoderMap.get(name).get(1));
             value.put("refined", geocoderMap.get(name).get(2));
-            value.put("waypoints", waypoints);
-            value.put("positions", "");
+            value.put("waypoints", json);
             value.put("phone", geocoderMap.get(name).get(3));
             value.put("colour", geocoderMap.get(name).get(4));
+            value.put("nameFirst", ((boolean) varMap.get(table).get("name_first")) ? 1 : 0);
             values.get(table).add(value);
-            markers.get(table).add(new MyItem(latitude, longitude, nameCode, nameSnippet,
-                    geocoderMap.get(name).get(1), geocoderMap.get(name).get(2), waypoints, geocoderMap.get(name).get(3), geocoderMap.get(name).get(4)));
+            markers.get(table).add(new CustomItem(latitude, longitude, nameCode, nameSnippet,
+                    geocoderMap.get(name).get(1), geocoderMap.get(name).get(2), waypoints,
+                    geocoderMap.get(name).get(3), geocoderMap.get(name).get(4),
+                    ((boolean) varMap.get(table).get("name_first"))));
         }
 
-        private void populateWaypoints(String table, String name, String pluscode) {
+        public void populateWaypoints(String table, String name, String pluscode) {
             List<ContentValues> cv = values.get(table);
             for (ContentValues value : cv) {
                 if (value.containsKey("code") && value.containsKey("name")) {
@@ -1915,17 +2755,29 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     String vname = value.getAsString("name");
                     String vtitle = vcode + (vcode.isEmpty() ? "" : vname.isEmpty() ? "" : " ") + (vname.isEmpty() ? "" : vname);
                     if (vtitle.equals(name)) {
-                        value.put("positions", gson.toJson(waypointValues.get(table).get(name), BranchDirectoryMap.POSITIONS_TYPE));
-                        return;
+                        Map<String, LatLng> waypointsMap = new LinkedHashMap<>();
+                        Map<String, LatLng> valuesMap = waypointValues.get(table).get(name);
+                        Map<String, LatLng> mergedMap;
+                        if (value.containsKey("waypoints")) {
+                            waypointsMap = BranchDirectoryMap.gson.fromJson(value.getAsString("waypoints"), BranchDirectoryMap.WAYPOINTS_TYPE);
+                            value.remove("waypoints");
+                            LatLngMerger merger = new LatLngMerger();
+                            mergedMap = merger.merge(waypointsMap, valuesMap);
+                        } else {
+                            Log.e(TAG, "Error at populateWaypoints: waypoints key not found in: " + table + ", " + vcode + ", " + vname);
+                            return;
+                        }
+                        value.put("waypoints", BranchDirectoryMap.gson.toJson(mergedMap, BranchDirectoryMap.WAYPOINTS_TYPE));
+                        break;      // break since only one entry should match
                     }
                 }
             }
-            List<MyItem> items = markers.get(table);
-            for (MyItem item : items) {
+            List<CustomItem> items = markers.get(table);
+//            Log.i(TAG, "populateWaypoints: " + table + ", " + name + ", " + pluscode);
+            for (CustomItem item : items) {
                 if (item.getTitle().equals(name)) {
-                    item.setPositions(pluscode, waypointValues.get(table).get(name).get(pluscode));
-                    Log.i(TAG, "added waypoint to title: " + name + " positions: " + item.getPositions());
-                    return;
+                    item.setWaypoint(pluscode, waypointValues.get(table).get(name).get(pluscode));
+                    return;     // return since only one entry should match
                 }
             }
             Log.e(TAG,"ERROR: populateWaypoints did not match: " + name + " in table: " + table);
@@ -1955,14 +2807,52 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             cursor.close();
             return exists;
         }
+
+        public static String[] parse(String full, String delim, String prefix, boolean nameFirst) {
+            if (full == null || delim == null || delim.isEmpty()) {
+                return new String[]{full, null};
+            }
+            if (!full.contains(delim) && prefix != null && !prefix.isEmpty() && full.contains(prefix)) {
+                return new String[]{null, full};
+            }
+
+            String nameSnippet;
+            String nameCode;
+
+            if (nameFirst) {
+                int idx = full.lastIndexOf(delim);
+                if (idx < 0) {
+                    nameSnippet = full;
+                    nameCode    = null;
+                } else {
+                    nameSnippet = full.substring(0, idx);
+                    nameCode    = full.substring(idx + delim.length());
+                }
+            } else {
+                int idx = full.indexOf(delim);
+                if (idx < 0) {
+                    nameSnippet = full;
+                    nameCode    = null;
+                } else {
+                    nameCode    = full.substring(0, idx);
+                    nameSnippet = full.substring(idx + delim.length());
+                }
+            }
+
+//            Log.i(TAG, "full: " + full + ", delim: " + delim + ", nameFirst: " + nameFirst);
+//            Log.i(TAG, "nameSnippet: " + nameSnippet);
+//            Log.i(TAG, "nameCode: " + nameCode);
+
+            return new String[]{nameSnippet, nameCode};
+        }
     }
 
-    private void GetInformationTaskCreator() {
+    public void GetInformationTaskCreator() {
         getInformationTask = new GetInformationTask(this);
         getInformationTask.execute();
     }
 
-    private class GetInformationTask extends AsyncTask<Void, Void, Object[]> {
+    public class GetInformationTask extends AsyncTask<Void, Void, Object[]> {
 
         private WeakReference<Activity> activityRef;
         private final Context context;
@@ -1977,9 +2867,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     markerLat = marker.getPosition().latitude;
                     markerLng = marker.getPosition().longitude;
                 } else {
-                    String lastWaypoint = currentItem.getWaypoints().split(",")[currentItem.getWaypoints().split(",").length - 1].trim();
-                    markerLat = currentItem.getPositions().get(lastWaypoint).latitude;
-                    markerLng = currentItem.getPositions().get(lastWaypoint).longitude;
+                    markerLat = currentItem.getWaypoints().get(currentItem.getLastWaypoint()).latitude;
+                    markerLng = currentItem.getWaypoints().get(currentItem.getLastWaypoint()).longitude;
                 }
             } else {
                 Log.e(TAG, "currentMarker is null, FIX THIS");
@@ -2012,7 +2901,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     linkApiKey = null;
 
                     // add waypoints from route markers first then add waypoints from currentItem
-                    if (!routeMarkers.isEmpty() || currentItem.getWaypoints().split(",").length > 1) {
+                    if (!routeMarkers.isEmpty() || currentItem.getWaypointsCount() > 1) {
                         CountDownLatch latch = new CountDownLatch(1);
                         Activity activity = activityRef.get();
                         activity.runOnUiThread(new Runnable() {
@@ -2064,6 +2953,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         if (computeDirectionsResponse.isSuccessful()) {
                             String responseString = computeDirectionsResponse.body().string();
                             JsonObject computeDirectionsJson = JsonParser.parseString(responseString).getAsJsonObject();
+                            Log.i(TAG, "response: " + computeDirectionsJson.toString());
                             if (computeDirectionsJson.has("routes") && !computeDirectionsJson.getAsJsonArray("routes").isEmpty()) {
                                 JsonObject route = computeDirectionsJson.getAsJsonArray("routes").get(0).getAsJsonObject();
                                 JsonArray legs = route.getAsJsonArray("legs");
@@ -2122,7 +3012,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         Iterator<String> iterator = routeMarkers.keySet().iterator();
                         while (iterator.hasNext()) {
                             String title = iterator.next();
-                            MyItem item = (MyItem) routeMarkers.get(title).get(1);
+                            CustomItem item = (CustomItem) routeMarkers.get(title).get(1);
                             if (item.getWaypoints().isEmpty()) {
                                 Marker marker = (Marker) routeMarkers.get(title).get(0);
                                 if (!iterator.hasNext() && marker.equals(currentMarker)) {
@@ -2140,15 +3030,15 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                                 waypointObject.add("location", locationObject);
                                 intermediatesArray.add(waypointObject);
                             } else {
-                                Iterator<String> waypointIterator = Arrays.asList(item.getWaypoints().split(",")).iterator();
+                                Iterator<String> waypointIterator = new ArrayList<>(item.getWaypoints().keySet()).iterator();
                                 while (waypointIterator.hasNext()) {
                                     String waypoint = waypointIterator.next();
                                     JsonObject waypointObject = new JsonObject();
                                     JsonObject locationObject = new JsonObject();
                                     JsonObject latLngObject = new JsonObject();
 
-                                    latLngObject.addProperty("latitude", item.getPositions().get(waypoint.trim()).latitude);
-                                    latLngObject.addProperty("longitude", item.getPositions().get(waypoint.trim()).longitude);
+                                    latLngObject.addProperty("latitude", item.getWaypoints().get(waypoint).latitude);
+                                    latLngObject.addProperty("longitude", item.getWaypoints().get(waypoint).longitude);
 
                                     locationObject.add("latLng", latLngObject);
                                     waypointObject.add("location", locationObject);
@@ -2161,32 +3051,17 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                                 }
                             }
                         }
-//                        for (String title : routeMarkers.keySet()) {
-//                            JsonObject waypointObject = new JsonObject();
-//                            JsonObject locationObject = new JsonObject();
-//                            JsonObject latLngObject = new JsonObject();
-//
-//                            latLngObject.addProperty("latitude", ((LatLng) routeMarkers.get(title).get(2)).latitude);
-//                            latLngObject.addProperty("longitude", ((LatLng) routeMarkers.get(title).get(2)).longitude);
-//
-//                            locationObject.add("latLng", latLngObject);
-//                            waypointObject.add("location", locationObject);
-//
-//                            // "via" is optional, via implies that the waypoint is not a stop
-////                            waypointObject.addProperty("via", true);
-//
-//                            intermediatesArray.add(waypointObject);
-//                        }
                     }
                     if (!currentItem.getWaypoints().isEmpty()) {
-                        String[] waypoints = currentItem.getWaypoints().split(",");
-                        for (String waypoint : Arrays.copyOfRange(waypoints, 0, waypoints.length - 1)) {
+                        List<String> waypoints = new ArrayList<>(currentItem.getWaypoints().keySet());
+                        waypoints.remove(currentItem.getWaypointsCount() - 1);
+                        for (String waypoint : waypoints) {
                             JsonObject waypointObject = new JsonObject();
                             JsonObject locationObject = new JsonObject();
                             JsonObject latLngObject = new JsonObject();
 
-                            latLngObject.addProperty("latitude", currentItem.getPositions().get(waypoint.trim()).latitude);
-                            latLngObject.addProperty("longitude", currentItem.getPositions().get(waypoint.trim()).longitude);
+                            latLngObject.addProperty("latitude", currentItem.getWaypoints().get(waypoint).latitude);
+                            latLngObject.addProperty("longitude", currentItem.getWaypoints().get(waypoint).longitude);
 
                             locationObject.add("latLng", latLngObject);
                             waypointObject.add("location", locationObject);
@@ -2268,9 +3143,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                                         differenceMinutes = (totalSeconds - totalStaticSeconds) / 60;
                                     }
 
-                                    Log.i(TAG, "distance: " + totalDistanceMeters);
-                                    Log.i(TAG, "unaware: " + totalStaticSeconds);
-                                    Log.i(TAG, "aware: " + totalSeconds);
+//                                    Log.i(TAG, "distance: " + totalDistanceMeters);
+//                                    Log.i(TAG, "unaware: " + totalStaticSeconds);
+//                                    Log.i(TAG, "aware: " + totalSeconds);
 
                                     String trafficLevel = "Traffic: ";
                                     int spanStart = trafficLevel.length();
@@ -2285,7 +3160,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                                     } else if (((double) totalSeconds / (double) totalStaticSeconds) >= trafficMetrics[2]) {
                                         trafficLevel += "High ";
                                         trafficLevel += "(+" + differenceMinutes + " mins)";
-                                        trafficColour = new ForegroundColorSpan(getResources().getColor(R.color.orange));
+                                        trafficColour = new ForegroundColorSpan(ContextCompat.getColor(context, R.color.orange));
                                     } else if (((double) totalSeconds / (double) totalStaticSeconds) >= trafficMetrics[1]) {
                                         trafficLevel += "Moderate ";
                                         trafficLevel += "(+" + differenceMinutes + " mins)";
@@ -2305,8 +3180,20 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                                             trafficLevel.length(),
                                             Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                                     );
+                                    int violated = 0;
+                                    if (isTollsEnabled && routeHasTolls(route)) {
+                                        violated |= VIOLATION_TOLLS;
+                                    }
+                                    if (isFerriesEnabled && routeHasFerry(legs)) {
+                                        violated |= VIOLATION_FERRIES;
+                                    }
+                                    if (isHighwaysEnabled && routeHasHighways(legs)) {
+                                        violated |= VIOLATION_HIGHWAYS;
+                                    }
 
-                                    return new Object[]{formattedDistance, formattedDuration, formatComputeRouteDuration(totalSeconds, true), allLegPolys, spannable};
+                                    return new Object[]{formattedDistance, formattedDuration,
+                                            formatComputeRouteDuration(totalSeconds, true),
+                                            allLegPolys, spannable, violated};
                                 }
                             } else {
                                 Log.e(TAG, "computeRoutesResponse error: " + computeRoutesResponse.message());
@@ -2364,9 +3251,12 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             } else {
                 Log.i(TAG, "encodedPolyline is null");
             }
+            if (result[5] != null) {
+                showAvoidanceViolationToast((int) result[5]);
+            }
         }
 
-        private String formatDistanceForLocale(long distanceMeters) {
+        public String formatDistanceForLocale(long distanceMeters) {
             Locale locale = Locale.getDefault();
             String country = locale.getCountry();
             if (useMiles(country)) {
@@ -2378,14 +3268,14 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             }
         }
 
-        private boolean useMiles(String country) {
+        public boolean useMiles(String country) {
             return "US".equalsIgnoreCase(country) ||
                     "LR".equalsIgnoreCase(country) ||
                     "MM".equalsIgnoreCase(country) ||
                     "GB".equalsIgnoreCase(country);
         }
 
-        private String formatComputeRouteDuration(long totalSeconds, boolean returnArrivalTime) {
+        public String formatComputeRouteDuration(long totalSeconds, boolean returnArrivalTime) {
             if (!returnArrivalTime) {
                 long hours = totalSeconds / 3600;
                 long minutes = (totalSeconds % 3600) / 60;
@@ -2405,6 +3295,85 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 long arrivalMillis = currentMillis + totalSeconds * 1000;
                 return sdf.format(new java.util.Date(arrivalMillis));
             }
+        }
+
+        private boolean routeHasTolls(JsonObject route) {
+            // Routes API: routeLabels may contain "TOLLS"
+            if (route.has("routeLabels")) {
+                for (JsonElement e : route.getAsJsonArray("routeLabels")) {
+                    String v = e.getAsString();
+                    if ("TOLLS".equalsIgnoreCase(v) || "TOLL".equalsIgnoreCase(v)) return true;
+                }
+            }
+            // Routes API: travelAdvisory.tollInfo present -> tolls involved
+            if (route.has("travelAdvisory")) {
+                JsonObject adv = route.getAsJsonObject("travelAdvisory");
+                if (adv.has("tollInfo")) return true;
+                if (adv.has("advisoryMessage")) {
+                    if (adv.get("advisoryMessage").getAsString().toLowerCase().contains("toll")) return true;
+                }
+            }
+            // Directions API (if you reuse logic): warnings like "This route has tolls"
+            if (route.has("warnings")) {
+                for (JsonElement w : route.getAsJsonArray("warnings")) {
+                    if (w.getAsString().toLowerCase().contains("toll")) return true;
+                }
+            }
+            return false;
+        }
+
+        private boolean routeHasFerry(JsonArray legs) {
+            for (JsonElement legEl : legs) {
+                JsonObject leg = legEl.getAsJsonObject();
+                if (!leg.has("steps")) continue;
+                for (JsonElement stepEl : leg.getAsJsonArray("steps")) {
+                    JsonObject step = stepEl.getAsJsonObject();
+                    // Routes API: navigationInstruction.maneuver or instructions may mention ferry
+                    if (step.has("navigationInstruction")) {
+                        JsonObject ni = step.getAsJsonObject("navigationInstruction");
+                        if (ni.has("maneuver") && ni.get("maneuver").getAsString().toUpperCase().contains("FERRY"))
+                            return true;
+                        if (ni.has("instructions") && ni.get("instructions").getAsString().toLowerCase().contains("ferry"))
+                            return true;
+                    }
+                    // Some payloads expose a travelMode per step
+                    if (step.has("travelMode") && "FERRY".equalsIgnoreCase(step.get("travelMode").getAsString()))
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        private boolean routeHasHighways(JsonArray legs) {
+            // Heuristics: look for road shields / instructions that clearly indicate highways
+            final Pattern HWY = Pattern.compile("\\b(I-\\d+|US-\\d+|Hwy\\b|Highway\\b|Route\\s+\\d+|M-\\d+|A\\d+|E\\d+)\\b",
+                    Pattern.CASE_INSENSITIVE);
+
+            for (JsonElement legEl : legs) {
+                JsonObject leg = legEl.getAsJsonObject();
+                if (!leg.has("steps")) continue;
+                for (JsonElement stepEl : leg.getAsJsonArray("steps")) {
+                    JsonObject step = stepEl.getAsJsonObject();
+
+                    // Some payloads include a roadShield/roadName
+                    if (step.has("roadName")) {
+                        if (HWY.matcher(step.get("roadName").getAsString()).find()) return true;
+                    }
+                    if (step.has("navigationInstruction")) {
+                        JsonObject ni = step.getAsJsonObject("navigationInstruction");
+                        if (ni.has("instructions") && HWY.matcher(ni.get("instructions").getAsString()).find())
+                            return true;
+                    }
+                    if (step.has("roadShield")) {
+                        JsonObject rs = step.getAsJsonObject("roadShield");
+                        if (rs.has("type")) {
+                            String t = rs.get("type").getAsString().toUpperCase();
+                            if (t.contains("INTERSTATE") || t.contains("US_HIGHWAY") || t.contains("STATE")) return true;
+                        }
+                    }
+                }
+            }
+            return false;
         }
     }
 }

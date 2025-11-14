@@ -5,97 +5,137 @@ import android.os.Parcelable;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
 import com.google.maps.android.clustering.ClusterItem;
 
-import java.lang.reflect.Type;
+import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-public class MyItem implements ClusterItem, Parcelable {
+public class CustomItem implements ClusterItem, Parcelable {
 
-    private static final String TAG = "SYS-MYITEM";
+    private static final String TAG = "SYS-CUSTOMITEM";
     private final LatLng position;  // latitude and longitude, derived from address or refined
     private final String code;      // location code, derived from full name
     private final String name;      // location name, derived from full name
     private final String snippet;   // location address
     private final String refined;   // refined address
-    private String waypoints;   // optional waypoints
-    private Map<String, LatLng> positions;    // LatLngs for optional waypoints
+    private final Map<String, LatLng> waypoints;    // LatLngs for optional waypoints, insertion
+                                                    // order preserved, derived from refined
+    private String lastWaypoint;    // last waypoint, derived from waypoints
+    private int waypointsCount;      // number of waypoints, derived from waypoints
     private final String phone;     // phone number
     private final String colour;    // marker colour
     private final float hue;        // marker hue, derived from colour
     private int selected;           // whether the marker is selected
-    private final static Gson gson = new Gson();
+    private boolean nameFirst;      // whether the name should be displayed first
 
-    public MyItem(double lat, double lng, String code, String name, String snippet, String refined, String waypoints, String phone, String colour) {
+    public CustomItem(double lat, double lng, String code, String name, String snippet, String refined,
+                      String waypointsStr, String phone, String colour, boolean nameFirst) {
         this.position = new LatLng(lat, lng);
         this.code = code;
         this.name = name;
         this.snippet = snippet;
         this.refined = refined;
-        this.waypoints = waypoints;
+        this.waypoints = new LinkedHashMap<>();
+        if (!waypointsStr.isEmpty()) {
+            Iterator<String> it = Arrays.asList(waypointsStr.split(",")).iterator();
+            while (it.hasNext()) {
+                String waypoint = it.next().trim();
+                this.waypoints.put(waypoint, null);
+                if (!it.hasNext()) {
+                    this.lastWaypoint = waypoint;
+                }
+            }
+        } else {
+            this.lastWaypoint = "";
+        }
+        this.waypointsCount = this.waypoints.size();
         this.phone = phone;
         this.colour = colour;
         this.hue = calcClr(colour);
         this.selected = -1;
-        this.positions = new HashMap<>();
-        String[] waypointsArray = waypoints.split(",");
-        for (String waypoint : waypointsArray) {
-            this.positions.put(waypoint.trim(), null);
-        }
+        this.nameFirst = nameFirst;
     }
 
-    public MyItem(double lat, double lng, String code, String name, String snippet, String refined, String waypoints, String jsonPositions, String phone, String colour) {
+    public CustomItem(double lat, double lng, String code, String name, String snippet, String refined, Map<String, LatLng> waypointsMap, String phone, String colour, boolean nameFirst) {
         this.position = new LatLng(lat, lng);
         this.code = code;
         this.name = name;
         this.snippet = snippet;
         this.refined = refined;
-        this.waypoints = waypoints;
+        if (waypointsMap != null) {
+            this.waypoints = waypointsMap;
+            for (String waypoint : this.waypoints.keySet()) {
+                this.lastWaypoint = waypoint;
+            }
+            this.waypointsCount = this.waypoints.size();
+        } else {
+            this.waypoints = new LinkedHashMap<>();
+            this.lastWaypoint = "";
+            this.waypointsCount = 0;
+        }
         this.phone = phone;
         this.colour = colour;
         this.hue = calcClr(colour);
         this.selected = -1;
-        this.positions = gson.fromJson(jsonPositions, BranchDirectoryMap.POSITIONS_TYPE);
+        this.nameFirst = nameFirst;
+    }
+
+    public CustomItem(CustomItem item) {
+        this.position = item.position;
+        this.code = item.code;
+        this.name = item.name;
+        this.snippet = item.snippet;
+        this.refined = item.refined;
+        this.waypoints = item.waypoints;
+        this.lastWaypoint = item.lastWaypoint;
+        this.waypointsCount = item.waypointsCount;
+        this.phone = item.phone;
+        this.colour = item.colour;
+        this.hue = item.hue;
+        this.selected = item.selected;
+        this.nameFirst = item.nameFirst;
     }
 
     // Parcelable implementation
-    protected MyItem(Parcel parcel) {
+    protected CustomItem(Parcel parcel) {
         position = parcel.readParcelable(LatLng.class.getClassLoader());
         code = parcel.readString();
         name = parcel.readString();
         snippet = parcel.readString();
         refined = parcel.readString();
-        waypoints = parcel.readString();
         phone = parcel.readString();
         colour = parcel.readString();
         hue = parcel.readFloat();
         selected = parcel.readInt();
+        nameFirst = parcel.readByte() != 0;
+        lastWaypoint = parcel.readString();
+        waypointsCount = parcel.readInt();
         int mapSize = parcel.readInt();
-        positions = new HashMap<>(mapSize);
+        waypoints = new LinkedHashMap<>(mapSize);
         for (int i = 0; i < mapSize; i++) {
             String key = parcel.readString();
             LatLng value = parcel.readParcelable(LatLng.class.getClassLoader());
-            positions.put(key, value);
+            waypoints.put(key, value);
         }
     }
 
-    public static final Creator<MyItem> CREATOR = new Creator<>() {
+    public static final Creator<CustomItem> CREATOR = new Creator<>() {
         @Override
-        public MyItem createFromParcel(Parcel in) {
-            return new MyItem(in);
+        public CustomItem createFromParcel(Parcel in) {
+            return new CustomItem(in);
         }
 
         @Override
-        public MyItem[] newArray(int size) {
-            return new MyItem[size];
+        public CustomItem[] newArray(int size) {
+            return new CustomItem[size];
         }
     };
 
@@ -106,20 +146,21 @@ public class MyItem implements ClusterItem, Parcelable {
         parcel.writeString(name);
         parcel.writeString(snippet);
         parcel.writeString(refined);
-        parcel.writeString(waypoints);
         parcel.writeString(phone);
         parcel.writeString(colour);
         parcel.writeFloat(hue);
         parcel.writeInt(selected);
-        parcel.writeInt(positions.size());
-        for (Map.Entry<String, LatLng> entry : positions.entrySet()) {
+        parcel.writeByte((byte) (nameFirst ? 1 : 0));
+        parcel.writeString(lastWaypoint);
+        parcel.writeInt(waypointsCount);
+        parcel.writeInt(waypoints.size());
+        for (Map.Entry<String, LatLng> entry : waypoints.entrySet()) {
             parcel.writeString(entry.getKey());
             parcel.writeParcelable(entry.getValue(), flags);
         }
     }
 
-    private float calcClr (String colour) {
-        // blue reserved for route markers
+    public float calcClr (String colour) {
         return switch (colour) {
             case "azure" -> BitmapDescriptorFactory.HUE_AZURE;
             case "blue" -> BitmapDescriptorFactory.HUE_RED;  // blue reserved for route markers
@@ -134,19 +175,31 @@ public class MyItem implements ClusterItem, Parcelable {
         };
     }
 
+    @NonNull
     @Override
     public LatLng getPosition() {
         return position;
     }
 
+    @NonNull
     @Override
     public String getTitle() {
-        return code + (code.isEmpty() ? "" : name.isEmpty() ? "" : " ") + (name.isEmpty() ? "" : name);
+        if (nameFirst) {
+            return name + (name.isEmpty() ? "" : code.isEmpty() ? "" : " ") + (code.isEmpty() ? "" : code);
+        } else {
+            return code + (code.isEmpty() ? "" : name.isEmpty() ? "" : " ") + (name.isEmpty() ? "" : name);
+        }
     }
 
     @Override
     public String getSnippet() {
         return snippet;
+    }
+
+    @Nullable
+    @Override
+    public Float getZIndex() {
+        return 0f;
     }
 
     public String getCode() {
@@ -161,21 +214,24 @@ public class MyItem implements ClusterItem, Parcelable {
         return refined;
     }
 
-    public String getWaypoints() {
+    public Map<String, LatLng> getWaypoints() {
         return waypoints;
     }
 
-    public Map<String, LatLng> getPositions() {
-        return positions;
+    public void setWaypoint(String waypoint, LatLng position) {
+        if (this.waypoints.containsKey(waypoint)) {
+            this.waypoints.put(waypoint, position);
+        } else {
+            Log.e(TAG, "CustomItem setWaypoints - waypoint not found: " + waypoint);
+        }
     }
 
-    public void setPositions(String waypoint, LatLng position) {
-        if (this.positions.containsKey(waypoint)) {
-            this.positions.put(waypoint, position);
-            Log.i(TAG, "MyItem setPositions new waypoint: " + this.positions);
-        } else {
-            Log.e(TAG, "MyItem setPositions - waypoint not found: " + waypoint);
-        }
+    public String getLastWaypoint() {
+        return lastWaypoint;
+    }
+
+    public int getWaypointsCount() {
+        return waypointsCount;
     }
 
     public String getPhone() {
@@ -198,6 +254,7 @@ public class MyItem implements ClusterItem, Parcelable {
         this.selected = selected;
     }
 
+    @NonNull
     @Override
     public String toString() {
         return getTitle();
@@ -208,9 +265,13 @@ public class MyItem implements ClusterItem, Parcelable {
         return 0;
     }
 
-    public static class MyItemSorter {
+    public CustomItem deepCopy() {
+        return new CustomItem(this);
+    }
 
-        public static List<MyItem> sortMyItemsByCode(List<MyItem> items) {
+    public static class CustomItemSorter {
+
+        public static List<CustomItem> sortCustomItemsByCode(List<CustomItem> items) {
             Collections.sort(items, (item1, item2) -> {
                 if (item1.getCode().isEmpty() && item2.getCode().isEmpty()) {
                     return item1.getName().compareTo(item2.getName());
@@ -219,6 +280,15 @@ public class MyItem implements ClusterItem, Parcelable {
                 }
             });
             return items;
+        }
+
+        public static void sortAllListsByCode(Map<String, List<CustomItem>> map) {
+            if (map == null) return;
+            for (List<CustomItem> list : map.values()) {
+                if (list != null) {
+                    sortCustomItemsByCode(list); // reuse your existing method
+                }
+            }
         }
     }
 }

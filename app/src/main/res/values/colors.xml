@@ -2,6 +2,9 @@
 <resources>
     <color name="pri_text_high">#000000</color>
     <color name="pri_text_medium">#444444</color>
+    <color name="pri_text_medium_alt">#BBBBBB</color>
+    <color name="pri_text_low">#FFFFFF</color>
+    <color name="pri_text_low_alt">#DDDDDD</color>
     <color name="transparent">#C0000000</color>
 
     <color name="white">#FFFFFF</color>

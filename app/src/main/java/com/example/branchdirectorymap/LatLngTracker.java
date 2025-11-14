@@ -16,7 +16,7 @@ public class LatLngTracker {
         return latLngSet.add(newLatLng);
     }
 
-    private static class LatLng {
+    public static class LatLng {
 
         private final double latitude;
         private final double longitude;

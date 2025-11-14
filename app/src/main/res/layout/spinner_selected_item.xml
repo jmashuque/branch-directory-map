@@ -3,6 +3,6 @@
     android:id="@+id/spinnerTextView"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:textColor="@android:color/black"
+    android:textColor="@color/pri_text_high"
     android:padding="8dp"
     android:textSize="16sp" />

@@ -5,12 +5,15 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fitsSystemWindows="true"
+    android:clipToPadding="false"
+    android:clipChildren="false"
     tools:context=".MainActivity">
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/layout_searchview"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:background="@color/pri_text_low_alt">
 
         <ImageButton
             android:id="@+id/button_menu"
@@ -23,11 +26,12 @@
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent" />
 
-        <com.example.branchdirectorymap.CustomSearchView
+        <androidx.appcompat.widget.SearchView
             android:id="@+id/searchView"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:iconifiedByDefault="false"
+            android:hint="@string/search_hint"
             app:layout_constraintStart_toEndOf="@id/button_menu"
             app:layout_constraintEnd_toStartOf="@+id/spinner_search"
             app:layout_constraintTop_toTopOf="parent"
@@ -35,11 +39,11 @@
 
         <Spinner
             android:id="@+id/spinner_search"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:background="@drawable/searchspinner_background"
-            android:layout_marginEnd="8dp"
-            app:layout_constraintDimensionRatio="1:1"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:padding="0dp"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toEndOf="@+id/searchView"
@@ -78,44 +82,56 @@
             android:visibility="gone"
             android:elevation="10dp">
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/button_marker_view"
                 android:layout_width="wrap_content"
-                android:layout_height="32dp"
-                android:paddingHorizontal="8sp"
+                android:layout_height="36dp"
+                android:minHeight="0dp"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="6dp"
                 android:text="@string/btn_view"
+                app:cornerRadius="8dp"
                 android:textColor="@color/white"
-                android:background="@drawable/info_window_background" />
+                app:backgroundTint="@color/transparent" />
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/button_marker_add"
                 android:layout_width="wrap_content"
-                android:layout_height="32dp"
-                android:paddingHorizontal="8sp"
-                android:layout_marginTop="2dp"
+                android:layout_height="36dp"
+                android:minHeight="0dp"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="6dp"
                 android:text="@string/btn_add"
+                app:cornerRadius="8dp"
+                android:layout_marginTop="-4dp"
                 android:textColor="@color/white"
-                android:background="@drawable/info_window_background" />
+                app:backgroundTint="@color/transparent" />
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/button_marker_remove"
                 android:layout_width="wrap_content"
-                android:layout_height="32dp"
-                android:paddingHorizontal="8sp"
-                android:layout_marginTop="2dp"
+                android:layout_height="36dp"
+                android:minHeight="0dp"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="6dp"
                 android:text="@string/btn_remove"
+                app:cornerRadius="8dp"
+                android:layout_marginTop="-4dp"
                 android:textColor="@color/white"
-                android:background="@drawable/info_window_background" />
+                app:backgroundTint="@color/transparent" />
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/button_marker_call"
                 android:layout_width="wrap_content"
-                android:layout_height="32dp"
-                android:paddingHorizontal="8sp"
-                android:layout_marginTop="2dp"
+                android:layout_height="36dp"
+                android:minHeight="0dp"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="6dp"
                 android:text="@string/btn_call"
+                app:cornerRadius="8dp"
+                android:layout_marginTop="-4dp"
                 android:textColor="@color/white"
-                android:background="@drawable/info_window_background" />
+                app:backgroundTint="@color/transparent" />
 
         </LinearLayout>
 
@@ -129,8 +145,20 @@
         android:background="@drawable/info_window_background"
         android:padding="16dp"
         android:text="@string/loading"
-        android:textColor="@android:color/white"
+        android:textColor="@color/white"
         android:textSize="18sp" />
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/button_directions"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentEnd="true"
+        android:layout_above="@id/button_clear"
+        android:layout_marginEnd="12dp"
+        app:tint="@color/pri_text_high"
+        app:backgroundTint="@color/pri_text_low_alt"
+        android:src="@drawable/ic_directions"
+        android:visibility="gone" />
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/button_clear"
@@ -139,7 +167,8 @@
         android:layout_alignParentBottom="true"
         android:layout_alignParentEnd="true"
         android:layout_margin="12dp"
-        app:backgroundTint="@color/lightgrey"
+        app:tint="@color/pri_text_high"
+        app:backgroundTint="@color/pri_text_low_alt"
         android:src="@drawable/ic_close"
         android:visibility="gone" />
 
@@ -150,8 +179,11 @@
         android:layout_alignParentStart="true"
         android:layout_alignParentBottom="true"
         android:layout_margin="12dp"
-        app:backgroundTint="@color/lightgrey"
-        android:src="@drawable/ic_route" />
+        app:tint="@color/pri_text_high"
+        app:backgroundTint="@color/pri_text_low_alt"
+        android:src="@drawable/ic_route"
+        android:elevation="6dp"
+        android:translationZ="0dp" />
 
     <LinearLayout
         android:id="@+id/menu_route"
@@ -160,7 +192,9 @@
         android:orientation="vertical"
         android:layout_alignParentBottom="true"
         android:layout_alignParentLeft="true"
-        android:background="@color/lightgrey">
+        android:background="@drawable/left_menu_rounded"
+        android:elevation="24dp"
+        android:translationZ="2dp">
 
         <TextView
             android:layout_width="wrap_content"
@@ -168,8 +202,8 @@
             android:layout_gravity="center"
             android:paddingTop="8dp"
             android:paddingBottom="8dp"
-            android:text="Route Options"
-            android:textColor="@color/black"
+            android:text="@string/route_options"
+            android:textColor="@color/pri_text_high"
             android:textSize="18sp"
             android:textStyle="bold" />
 
@@ -181,12 +215,12 @@
 
             <TextView
                 android:id="@+id/textview_traffic"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="Traffic"
+                android:text="@string/traffic"
                 android:layout_gravity="center_vertical|left"
                 android:layout_weight="1"
-                android:textColor="@color/black"
+                android:textColor="@color/pri_text_high"
                 android:textSize="16sp"
                 android:textStyle="bold" />
 
@@ -205,32 +239,37 @@
             android:paddingRight="8dp"
             android:orientation="horizontal">
 
-            <androidx.appcompat.widget.SwitchCompat
+            <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/switch_highways"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Highways"
-                android:textColor="@color/black"
+                android:text="@string/highways"
+                android:textColor="@color/pri_text_high"
                 android:textSize="16sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:layout_marginEnd="2dp"
+                app:switchPadding="2dp" />
 
-            <androidx.appcompat.widget.SwitchCompat
+            <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/switch_tolls"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Tolls"
-                android:textColor="@color/black"
+                android:text="@string/tolls"
+                android:textColor="@color/pri_text_high"
                 android:textSize="16sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:layout_marginEnd="2dp"
+                app:switchPadding="2dp" />
 
-            <androidx.appcompat.widget.SwitchCompat
+            <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/switch_ferries"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Ferries"
-                android:textColor="@color/black"
+                android:text="@string/ferries"
+                android:textColor="@color/pri_text_high"
                 android:textSize="16sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                app:switchPadding="2dp" />
 
         </LinearLayout>
 
@@ -242,9 +281,13 @@
         android:layout_height="wrap_content"
         android:layout_alignParentEnd="true"
         android:layout_alignParentBottom="true"
-        android:layout_margin="12dp"
-        app:backgroundTint="@color/lightgrey"
-        android:src="@drawable/ic_layer" />
+        android:layout_marginEnd="12dp"
+        android:layout_marginBottom="12dp"
+        app:tint="@color/pri_text_high"
+        app:backgroundTint="@color/pri_text_low_alt"
+        android:src="@drawable/ic_layer"
+        android:elevation="6dp"
+        android:translationZ="0dp" />
 
     <LinearLayout
         android:id="@+id/menu_layers"
@@ -253,7 +296,9 @@
         android:orientation="vertical"
         android:layout_alignParentBottom="true"
         android:layout_alignParentRight="true"
-        android:background="@color/lightgrey">
+        android:background="@drawable/right_menu_rounded"
+        android:elevation="24dp"
+        android:translationZ="2dp">
 
         <TextView
             android:layout_width="wrap_content"
@@ -261,30 +306,55 @@
             android:layout_gravity="center"
             android:paddingTop="8dp"
             android:paddingBottom="8dp"
-            android:text="Map Options"
-            android:textColor="@color/black"
+            android:text="@string/map_options"
+            android:textColor="@color/pri_text_high"
             android:textSize="18sp"
             android:textStyle="bold" />
 
         <LinearLayout
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:paddingLeft="8dp"
             android:orientation="horizontal">
 
             <TextView
                 android:id="@+id/textview_appearance"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="Map Type"
+                android:text="@string/map_type"
                 android:layout_gravity="center_vertical|left"
                 android:layout_weight="1"
-                android:textColor="@color/black"
+                android:textColor="@color/pri_text_high"
                 android:textSize="16sp"
                 android:textStyle="bold" />
 
             <Spinner
                 android:id="@+id/spinner_appearance"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical|right" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:paddingLeft="8dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/textview_theme"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:text="@string/app_theme"
+                android:layout_gravity="center_vertical|left"
+                android:layout_weight="1"
+                android:textColor="@color/pri_text_high"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <Spinner
+                android:id="@+id/spinner_theme"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center_vertical|right" />
@@ -299,32 +369,37 @@
             android:paddingRight="8dp"
             android:orientation="horizontal">
 
-            <androidx.appcompat.widget.SwitchCompat
+            <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/switch_traffic"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Traffic"
-                android:textColor="@color/black"
+                android:text="@string/traffic"
+                android:textColor="@color/pri_text_high"
                 android:textSize="16sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:layout_marginEnd="2dp"
+                app:switchPadding="2dp" />
 
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/switch_dark"
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/switch_alt"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Dark"
-                android:textColor="@color/black"
+                android:text="@string/alt"
+                android:textColor="@color/pri_text_high"
                 android:textSize="16sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:layout_marginEnd="2dp"
+                app:switchPadding="2dp" />
 
-            <androidx.appcompat.widget.SwitchCompat
+            <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/switch_mono"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Mono"
-                android:textColor="@color/black"
+                android:text="@string/mono"
+                android:textColor="@color/pri_text_high"
                 android:textSize="16sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                app:switchPadding="2dp" />
 
         </LinearLayout>
 

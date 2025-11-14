@@ -8,6 +8,8 @@ import android.database.sqlite.SQLiteOpenHelper;
 import android.os.Environment;
 import android.util.Log;
 
+import com.google.android.gms.maps.model.LatLng;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -33,12 +35,6 @@ public class LocationDatabaseHelper extends SQLiteOpenHelper {
 
     @Override
     public void onCreate(SQLiteDatabase db) {
-//        String sql = "CREATE TABLE varmap (" +
-//                "string TEXT PRIMARY KEY" +
-//                ")";
-//        db.execSQL(sql);
-//        Log.i(TAG, "varmap created");
-//        createTable(db, "varmap");
     }
 
     @Override
@@ -62,9 +58,9 @@ public class LocationDatabaseHelper extends SQLiteOpenHelper {
                     "address TEXT NOT NULL," +
                     "refined TEXT NOT NULL," +
                     "waypoints TEXT NOT NULL," +
-                    "positions TEXT NOT NULL," +
                     "phone TEXT NOT NULL," +
                     "colour TEXT NOT NULL," +
+                    "nameFirst INTEGER NOT NULL," +
                     "PRIMARY KEY (code, name)" +
                     ")";
         }
@@ -132,23 +128,11 @@ public class LocationDatabaseHelper extends SQLiteOpenHelper {
         }
     }
 
-//    public void insertLocation(double longitude, double latitude, String code, String name, String address, String refined) {
-//        SQLiteDatabase db = getWritableDatabase();
-//        ContentValues values = new ContentValues();
-//        values.put("latitude", latitude);
-//        values.put("longitude", longitude);
-//        values.put("code", code);
-//        values.put("name", name);
-//        values.put("address", address);
-//        values.put("refined", refined);
-//        db.insert(BuildConfig.TABLE_NAME, null, values);
-//        db.close();
-//    }
-
-    public Map<String, List<MyItem>> getAllLocations(SQLiteDatabase db) {
+    public Map<String, List<CustomItem>> getAllLocations(SQLiteDatabase db) {
+        db.beginTransaction();
         ArrayList<String> tableNames = getTables(db);
-        Map<String, List<MyItem>> markers = new HashMap<>();
-        List<MyItem> mapmarkers;
+        Map<String, List<CustomItem>> markers = new HashMap<>();
+        List<CustomItem> mapmarkers;
         Cursor cursor;
 //        Log.i(TAG, "tableNames: " + tableNames.toString());
         for (String table : tableNames) {
@@ -166,16 +150,19 @@ public class LocationDatabaseHelper extends SQLiteOpenHelper {
                 @SuppressLint("Range") String nam = cursor.getString(cursor.getColumnIndex("name"));
                 @SuppressLint("Range") String add = cursor.getString(cursor.getColumnIndex("address"));
                 @SuppressLint("Range") String ref = cursor.getString(cursor.getColumnIndex("refined"));
-                @SuppressLint("Range") String way = cursor.getString(cursor.getColumnIndex("waypoints"));
-                @SuppressLint("Range") String pos = cursor.getString(cursor.getColumnIndex("positions"));
+                @SuppressLint("Range") String json = cursor.getString(cursor.getColumnIndex("waypoints"));
                 @SuppressLint("Range") String tel = cursor.getString(cursor.getColumnIndex("phone"));
                 @SuppressLint("Range") String clr = cursor.getString(cursor.getColumnIndex("colour"));
-                mapmarkers.add(new MyItem(lat, lng, cod, nam, add, ref, way, pos, tel, clr));
+                @SuppressLint("Range") boolean first = cursor.getInt(cursor.getColumnIndex("nameFirst")) != 0;
+//                Log.i(TAG, "json: " + json);
+                Map<String, LatLng> way = BranchDirectoryMap.gson.fromJson(json, BranchDirectoryMap.WAYPOINTS_TYPE);
+                mapmarkers.add(new CustomItem(lat, lng, cod, nam, add, ref, way, tel, clr, first));
             }
             cursor.close();
             markers.put(table, mapmarkers);
         }
-//        db.close();
+        db.endTransaction();
+        db.close();
 //        Log.i(TAG, "mapmarkers size: " + mapmarkers.size());
         return markers;
     }
@@ -197,26 +184,6 @@ public class LocationDatabaseHelper extends SQLiteOpenHelper {
         }
         return value;
     }
-
-//    public MyItem findLocationByCode(String code) {
-//        SQLiteDatabase db = getReadableDatabase();
-//        Cursor cursor = db.query(BuildConfig.TABLE_NAME, null, "code = ?", new String[]{code}, null, null, null);
-//        if (cursor.moveToFirst()) {
-//            return new MyItem(cursor.getDouble(0), cursor.getDouble(1), cursor.getString(2), cursor.getString(3), cursor.getString(4), cursor.getString(5));
-//        } else {
-//            return null;
-//        }
-//    }
-
-//    public MyItem findLocationByName(String name) {
-//        SQLiteDatabase db = getReadableDatabase();
-//        Cursor cursor = db.query(BuildConfig.TABLE_NAME, null, "name = ?", new String[]{name}, null, null, null);
-//        if (cursor.moveToFirst()) {
-//            return new MyItem(cursor.getDouble(0), cursor.getDouble(1), cursor.getString(2), cursor.getString(3), cursor.getString(4), cursor.getString(5));
-//        } else {
-//            return null;
-//        }
-//    }
 
     public boolean importDatabase(InputStream inputStream) {
         boolean success = true;

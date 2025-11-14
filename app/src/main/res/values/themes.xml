@@ -1,3 +1,14 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="BaseTheme" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/pri_text_high</item>
+        <item name="android:statusBarColor">@color/pri_text_low_alt</item>
+        <item name="android:navigationBarColor">@color/pri_text_low_alt</item>
+        <item name="android:textColorSecondary">@color/pri_text_medium</item>
+        <item name="searchViewStyle">@style/SearchView</item>
+    </style>
 
+    <style name="SearchView" parent="Widget.AppCompat.SearchView">
+        <item name="queryBackground">@android:color/transparent</item>
+        <item name="submitBackground">@android:color/transparent</item>
+    </style>
 </resources>

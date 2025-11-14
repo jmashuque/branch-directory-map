@@ -5,7 +5,7 @@
     android:orientation="vertical"
     android:gravity="center"
     android:background="@drawable/info_window_background"
-    android:padding="16dp">
+    android:padding="8dp">
 
     <TextView
         android:id="@+id/title"
@@ -37,7 +37,7 @@
 
     <Button
         android:id="@+id/directionsButton"
-        style="?android:attr/buttonBarButtonStyle"
+        style="@style/Widget.Material3.Button"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/btn_navi" />
