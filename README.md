@@ -19,12 +19,13 @@ This project and associated README file are under active development and may cha
 
 ## Overview
 
-Branch Directory Map is my latest Android app, coded mostly in Java using Android Studio. This app primarily uses the Google Maps SDK for Android and various Google API's. Basically it reads CSV files (converted from XLSX files or other sources) and then parses this data to create an SQLite database, and then contacts Google Maps Geocoding API to get latitude/longitude positions and stores them for future retrieval in the database. Users can see all the valid locations or branches on a Google Map fragment, with custom coloured markers for each CSV file read. Users are able to search for branches based on branch codes or names or addresses, and get information about that branch like distance and ETA, as well as traffic information and a polyline projected on the map to show the optimal route to take. Users can also call branches that have listed phone numbers. There is also a routing feature that lets users add multiple branches to a route and use the Google Maps app for Android to navigate to all the branches on the route, as well as show all information for the whole route. This app is in a beta status currently, so commercial usage isn't advised just yet, although my ultimate goal is to make this app usable by any company who needs a mapped branch directory for driver navigation. I am a driver for one of the largest rental car companies in the world and I developed this app to help myself and my coworkers navigate between the hundreds of branches and dealerships we deal with, and it has been popular among Android-user drivers. An iOS version is planned in the future once I learn Flutter.
+Branch Directory Map is an Android app, coded mostly in Java using Android Studio. This app primarily uses the Google Maps SDK for Android and various Google API's. Basically it reads CSV files (converted from XLSX files or other sources) and then parses this data to create an SQLite database, and then contacts Google Maps Geocoding API to get latitude/longitude positions and stores them for future retrieval in the database. Users can see all the valid locations or branches on a Google Map fragment, with custom coloured markers for each CSV file read. Users are able to search for branches based on branch codes or names or addresses, and get information about that branch like distance and ETA, as well as traffic information and a polyline projected on the map to show the optimal route to take. Users can also call branches that have listed phone numbers. There is also a routing feature that lets users add multiple branches to a route and use the Google Maps app for Android to navigate to all the branches on the route, as well as show all information for the whole route. This app is in a beta status currently, so commercial usage isn't advised just yet, although my ultimate goal is to make this app usable by any company who needs a mapped branch directory for driver navigation. I developed this app to help drivers, working for one of the largest rental car companies in the world, navigate between the hundreds of branches and dealerships they deal with, and it has been immensely well received and used.
 
 With the current Essentials tier, Google is surprisingly generous with 10,000 free calls per API for all non-Pro/Enterprise level Google Maps Platform API's. Refer here for Google's latest tier-based pricing and limits: [Platform Pricing & API Costs](https://cloud.google.com/maps-platform/pricing)
 
 ## Features
 
+- high backwards compatibility, going as far back as Android Marshmallow (6.0)
 - use either Directions API for simple routing or Advanced Routing features using Routes API
 - add up to 23 (or 25 if using Advanced Routing) intermediate branches within one route using waypoints
 - ability to change map layers including traffic and satellite views, various traffic routing models, route preferences like tolls/highways/ferries
@@ -108,7 +109,7 @@ The following are all the user-modifiable variables in `gradle.properties` and t
 | REFINEDADDRESSOFFSET | int\[]     | y-index(es) of refined address column                                                                                                                                                                                                                       |
 | ROOT                 | bool       | allow root access, for the security of api keys this should be set to false                                                                                                                                                                                 |
 | ROWSPERSET           | int\[]     | number of rows per set                                                                                                                                                                                                                                      |
-| SETTINGSPERFILE      | bool       | read comma separated values, one set per file name expected, otherwise first value used, settings that can have multiple values are denoted by \[] after (type)                                                                                             |
+| SETTINGSPERFILE      | bool       | read comma separated values, one set per file name expected, otherwise first value used, settings that can have multiple values are denoted by \[] after type                                                                                               |
 | STYLEJSON            | str\[6]    | raw resource file names for map styling, for reference only, do not change, you can alter the files themselves to apply custom styling                                                                                                                      |
 | TIMEOUT              | int        | timeout in seconds for firebase api key remote config                                                                                                                                                                                                       |
 | TITLEINDEX           | int\[]     | x-index(es) of title column, title includes branch code and/or name                                                                                                                                                                                         |
@@ -204,7 +205,6 @@ Now simply right click on any of the buttons on the toolbar and click `Customize
 - user feedback through Firebase to report wrong information, address changes, new branches to add, or bugs
 - distribute DB files through Firebase so users don't have to geocode anything themselves, preventing further API costs
 - backend proxy option in the works for securing the requests API key
-- eventually a Flutter version for iOS implementation
 - usage of the Places API to be able to select addresses on the map, and ability to select waypoints to route through them
 - possible hidden debug menu for easy developer access to functions and being able to override build parameters
 - maybe Firebase App Check if I ever figure out how to implement it without Play Integrity
@@ -248,6 +248,13 @@ There is one known issue I've been trying to resolve. Your logcat may be flooded
 - upcoming: visual waypoint counter displayed on the map fragment when relevant
 - upcoming: new option `BADMARKERS` to display branches not successfully geocoded in the suggestion list, but not on the map
 - upcoming: proper edge-to-edge and gesture navigation support
+
+### 0.1-beta1-fix (2026-01-03)
+- fix: build number no longer padded
+- fix: 'All' table option hidden when only one table is loaded
+- fix: resolved issue with crashes when loading marker info for branch with multiple waypoints without geocoding
+- fix: CMake version made consistent so build succeeds when using NDK
+- revised: `libs.versions.toml` updated including AGP version
 
 ### 0.1-beta1 (2025-11-13)
 - feature: revamped UI with directions button if markers are selected, many minor UI tweaks and fixes

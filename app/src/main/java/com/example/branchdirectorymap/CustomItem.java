@@ -64,7 +64,8 @@ public class CustomItem implements ClusterItem, Parcelable {
         this.nameFirst = nameFirst;
     }
 
-    public CustomItem(double lat, double lng, String code, String name, String snippet, String refined, Map<String, LatLng> waypointsMap, String phone, String colour, boolean nameFirst) {
+    public CustomItem(double lat, double lng, String code, String name, String snippet, String refined,
+                      Map<String, LatLng> waypointsMap, String phone, String colour, boolean nameFirst) {
         this.position = new LatLng(lat, lng);
         this.code = code;
         this.name = name;
@@ -257,7 +258,21 @@ public class CustomItem implements ClusterItem, Parcelable {
     @NonNull
     @Override
     public String toString() {
-        return getTitle();
+        return "CustomItem{" +
+                "position=" + position +
+                ", code='" + code + '\'' +
+                ", name='" + name + '\'' +
+                ", snippet='" + snippet + '\'' +
+                ", refined='" + refined + '\'' +
+                ", waypoints=" + (waypoints == null ? "null" : waypoints) +
+                ", lastWaypoint='" + lastWaypoint + '\'' +
+                ", waypointsCount=" + waypointsCount +
+                ", phone='" + phone + '\'' +
+                ", colour='" + colour + '\'' +
+                ", hue=" + hue +
+                ", selected=" + selected +
+                ", nameFirst=" + nameFirst +
+                '}';
     }
 
     @Override

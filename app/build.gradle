@@ -7,17 +7,17 @@ def versionPropsFile = file("$rootDir/version.properties")
 def versionProps = new Properties()
 if (!versionPropsFile.exists()) {
     versionPropsFile.withWriter { writer ->
-        versionProps.setProperty('VERSION_BUILD', '000000')
+        versionProps.setProperty('VERSION_BUILD', '0')
         versionProps.store(writer, null)
     }
 }
 versionProps.load(new FileInputStream(versionPropsFile))
-def previousBuildNum = versionProps['VERSION_BUILD'].toInteger()
+def previousBuildNum = (versionProps['VERSION_BUILD'] ?: "0").toInteger()
 def newBuildNum = previousBuildNum + 1
-def formattedBuild = String.format('%06d', newBuildNum)
+def buildNumber = newBuildNum.toString()
 tasks.named("preBuild").configure { pre ->
     pre.doFirst {
-        versionProps.setProperty("VERSION_BUILD", formattedBuild)
+        versionProps.setProperty("VERSION_BUILD", buildNumber)
         versionPropsFile.withWriter { writer ->
             versionProps.store(writer, null)
         }
@@ -32,7 +32,7 @@ android {
         minSdk 23
         targetSdk 36
         versionCode newBuildNum
-        versionName "0.1-beta1 (build ${formattedBuild})"
+        versionName "0.1-beta1-fix (build ${buildNumber})"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -206,7 +206,7 @@ android {
         externalNativeBuild {
             cmake {
                 path file('src/main/cpp/CMakeLists.txt')
-                version '3.31.6'
+                version '4.1.2'
             }
         }
         packagingOptions {

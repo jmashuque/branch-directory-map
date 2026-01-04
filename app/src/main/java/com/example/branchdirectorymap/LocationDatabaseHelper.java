@@ -259,7 +259,7 @@ public class LocationDatabaseHelper extends SQLiteOpenHelper {
                 Log.i(TAG, "External storage not writable.");
             }
         } catch (IOException e) {
-            Log.i(TAG, "Er   ror exporting database: " + e.getMessage());
+            Log.i(TAG, "Error exporting database: " + e.getMessage());
         }
     }
 

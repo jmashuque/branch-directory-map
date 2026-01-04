@@ -139,6 +139,7 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 
+import okhttp3.ResponseBody;
 import retrofit2.Call;
 import retrofit2.Callback;
 
@@ -338,12 +339,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         menuButton.setVisibility(View.GONE);
 
         searchSpinner = findViewById(R.id.spinner_search);
-        if (BuildConfig.SHOW_ALL_HEADER) {
-            searchAdapter = new SearchSpinnerAdapter(this, tables, getString(R.string.header_all));
-        } else {
-            searchAdapter = new SearchSpinnerAdapter(this, tables, null);
-        }
-        searchSpinner.setAdapter(searchAdapter);
         searchSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
@@ -1671,7 +1666,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         } else {
             callMarkerButton.setVisibility(View.GONE);
         }
-        // FIX THIS: add ability to add marker to route multiple times
         if (currentItem.getSelected() > -1) {
             addMarkerButton.setVisibility(View.GONE);
             removeMarkerButton.setVisibility(View.VISIBLE);
@@ -2079,53 +2073,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         return out;
     }
 
-    public void addToMap(Map<String, Map<String, Object>> outer, Map<String, List<CustomItem>> inner) {
-        for (String table : inner.keySet()) {
-            if (outer.containsKey(table)) {
-//                Log.i(TAG, "outer table: " + outer.get(table));
-//                Log.i(TAG, "inner table: " + inner.get(table));
-                ArrayList<String> outerList = (ArrayList<String>) outer.get(table).get("array");
-                for (CustomItem item : inner.get(table)) {
-                    List<String> newItem = Arrays.asList(item.getTitle(), item.getSnippet(), item.getRefined(), item.getPhone(), item.getColour());
-//                    Log.i(TAG, "to be added: " + item.getTitle() + ", " + item.getSnippet() + ", " + item.getRefined() + ", " + item.getPhone());
-                    int matchIndex = outerList.indexOf(item.getTitle());
-                    if (matchIndex > -1) {
-//                        Log.i(TAG, "match index: " + matchIndex + " item: " + item.getTitle());
-                        outerList.subList(matchIndex, matchIndex + BranchDirectoryMap.NUM_OF_CUSTOMITEM_VARS).clear();
-                        outerList.addAll(matchIndex, newItem);
-                    } else {
-                        outerList.addAll(newItem);
-                    }
-                }
-//                Log.i(TAG, "new outer array: " + outer.get(table).get("array"));
-            } else {
-                Log.e(TAG, "WARNING: addToMap - outer table not found");
-            }
-        }
-    }
-
-    public void addToMapWaypoints(Map<String, Map<String, Object>> outer, Map<String, Map<String, Map<String, LatLng>>> inner) {
-        for (String reftable : inner.keySet()) {
-            if (outer.containsKey(reftable)) {
-                Map<String, Object> outerMap = outer.get(reftable);
-                Map<String, Map<String, LatLng>> innerMap = new HashMap<>();
-                for (String refname : inner.get(reftable).keySet()) {
-                    if (((ArrayList<String>) outer.get(reftable).get("array")).contains(refname)) {
-                        innerMap.put(refname, new HashMap<>());
-                        innerMap.get(refname).putAll(inner.get(reftable).get(refname));
-                    } else {
-                        Log.e(TAG, "WARNING: addToMapWaypoints - outer name not found: " + refname + " from table: " + reftable);
-                    }
-                }
-                outerMap.put("waypoints", innerMap);
-//                Log.i(TAG, "new outer: " + outer.get(reftable).get("waypoints"));
-//                Log.i(TAG, "outer array: " + outer.get(reftable).get("array"));
-            } else {
-                Log.e(TAG, "WARNING: addToMapWaypoints - outer table not found:" + reftable);
-            }
-        }
-    }
-
     private void showAvoidanceViolationToast(int violated) {
         if (violated == 0) return;
 
@@ -2365,11 +2312,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             } else {
                 varMapStr = dbHelper.getVarMapStr(false);
                 varMap = BranchDirectoryMap.gson.fromJson(varMapStr, BranchDirectoryMap.VARMAP_TYPE);
-//                Log.i(TAG, "new markers: " + markers.toString());
-//                Log.i(TAG, "varMap 1: " + varMap);
                 for (String table : varMap.keySet()) {
-//                    Log.i(TAG, "tablesSet 2: " + tablesSet);
-//                    Log.i(TAG, "table 2: " + table);
                     if (tablesSet.add(table)) {
                         tables.add(table);
                     } else {
@@ -2609,7 +2552,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             }
 
             Collections.sort(tables);
-            searchAdapter.notifyDataSetChanged();
             if (db == null || !db.isOpen()) {
                 db = dbHelper.getWritableDatabase();
             }
@@ -2655,7 +2597,38 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             for (String table : tables) {
                 clusterItemMarkerMap.put(table, new HashMap<>());
             }
-            if (BuildConfig.SHOW_ALL_HEADER) {
+            // populate CustomItem waypoints from varMap
+            for (String table : varMap.keySet()) {
+                Map<String, Map<String, Object>> waypoints = (Map<String, Map<String, Object>>) varMap.get(table).get("waypoints");
+                if (waypoints != null) for (String name : waypoints.keySet()) {
+                    for (CustomItem item : markers.get(table)) {
+                        if (item.getTitle().equals(name)) {
+                            Map<String, Object> byPluscode = waypoints.get(name);
+                            for (String pluscode : byPluscode.keySet()) {
+                                Object o = byPluscode.get(pluscode);
+                                LatLng ll;
+                                if (o instanceof LatLng) {
+                                    ll = (LatLng) o;
+                                } else {
+                                    Map<String, Object> m = (Map<String, Object>) o;
+                                    Object latObj = m.get("l");
+                                    if (latObj == null) latObj = m.get("latitude");
+                                    if (latObj == null) latObj = m.get("lat");
+                                    Object lngObj = m.get("m");
+                                    if (lngObj == null) lngObj = m.get("longitude");
+                                    if (lngObj == null) lngObj = m.get("lng");
+                                    double lat = ((Number) latObj).doubleValue();
+                                    double lng = ((Number) lngObj).doubleValue();
+                                    ll = new LatLng(lat, lng);
+                                }
+                                item.setWaypoint(pluscode, ll);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            if (BuildConfig.SHOW_ALL_HEADER && tables.size() > 1) {
                 clusterItemMarkerMap.put(getString(R.string.header_all), new HashMap<>());
                 markers.put(getString(R.string.header_all), Collections.synchronizedList(new ArrayList<>()));
 
@@ -2670,13 +2643,18 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                     }
                 }
                 markers.put(getString(R.string.header_all), all);
+                searchAdapter = new SearchSpinnerAdapter(context, tables, getString(R.string.header_all));
+            } else {
+                searchAdapter = new SearchSpinnerAdapter(context, tables, null);
             }
-            if (!BuildConfig.DEFAULT_FILE.isEmpty()) {
+            searchAdapter.notifyDataSetChanged();
+            if (!BuildConfig.DEFAULT_FILE.isEmpty() && tables.size() > 1) {
                 currentTable = BuildConfig.DEFAULT_FILE.substring(0,
                         BuildConfig.DEFAULT_FILE.contains(".") ? BuildConfig.DEFAULT_FILE.lastIndexOf(".") : BuildConfig.DEFAULT_FILE.length());
             } else {
                 currentTable = tables.get(0);
             }
+            searchSpinner.setAdapter(searchAdapter);
             int position = Collections.binarySearch(tables, currentTable) + 1;
             searchSpinner.setSelection(position);
             searchAdapter.setSelectedItemPosition(position);
@@ -2691,6 +2669,53 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             menuButton.setVisibility(View.VISIBLE);
 
             Toast.makeText(context, getString(R.string.finished), Toast.LENGTH_SHORT).show();
+        }
+
+        public void addToMap(Map<String, Map<String, Object>> outer, Map<String, List<CustomItem>> inner) {
+            for (String table : inner.keySet()) {
+                if (outer.containsKey(table)) {
+//                Log.i(TAG, "outer table: " + outer.get(table));
+//                Log.i(TAG, "inner table: " + inner.get(table));
+                    ArrayList<String> outerList = (ArrayList<String>) outer.get(table).get("array");
+                    for (CustomItem item : inner.get(table)) {
+                        List<String> newItem = Arrays.asList(item.getTitle(), item.getSnippet(), item.getRefined(), item.getPhone(), item.getColour());
+//                    Log.i(TAG, "to be added: " + item.getTitle() + ", " + item.getSnippet() + ", " + item.getRefined() + ", " + item.getPhone());
+                        int matchIndex = outerList.indexOf(item.getTitle());
+                        if (matchIndex > -1) {
+//                        Log.i(TAG, "match index: " + matchIndex + " item: " + item.getTitle());
+                            outerList.subList(matchIndex, matchIndex + BranchDirectoryMap.NUM_OF_CUSTOMITEM_VARS).clear();
+                            outerList.addAll(matchIndex, newItem);
+                        } else {
+                            outerList.addAll(newItem);
+                        }
+                    }
+//                Log.i(TAG, "new outer array: " + outer.get(table).get("array"));
+                } else {
+                    Log.e(TAG, "WARNING: addToMap - outer table not found");
+                }
+            }
+        }
+
+        public void addToMapWaypoints(Map<String, Map<String, Object>> outer, Map<String, Map<String, Map<String, LatLng>>> inner) {
+            for (String reftable : inner.keySet()) {
+                if (outer.containsKey(reftable)) {
+                    Map<String, Object> outerMap = outer.get(reftable);
+                    Map<String, Map<String, LatLng>> innerMap = new HashMap<>();
+                    for (String refname : inner.get(reftable).keySet()) {
+                        if (((ArrayList<String>) outer.get(reftable).get("array")).contains(refname)) {
+                            innerMap.put(refname, new HashMap<>());
+                            innerMap.get(refname).putAll(inner.get(reftable).get(refname));
+                        } else {
+                            Log.e(TAG, "WARNING: addToMapWaypoints - outer name not found: " + refname + " from table: " + reftable);
+                        }
+                    }
+                    outerMap.put("waypoints", innerMap);
+//                Log.i(TAG, "new outer: " + outer.get(reftable).get("waypoints"));
+//                Log.i(TAG, "outer array: " + outer.get(reftable).get("array"));
+                } else {
+                    Log.e(TAG, "WARNING: addToMapWaypoints - outer table not found:" + reftable);
+                }
+            }
         }
 
         public void removeFromVarMap(String table, String name) {
@@ -2748,6 +2773,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         }
 
         public void populateWaypoints(String table, String name, String pluscode) {
+//            Log.i(TAG, "populateWaypoints: " + table + ", " + name + ", " + pluscode);
             List<ContentValues> cv = values.get(table);
             for (ContentValues value : cv) {
                 if (value.containsKey("code") && value.containsKey("name")) {
@@ -2773,10 +2799,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 }
             }
             List<CustomItem> items = markers.get(table);
-//            Log.i(TAG, "populateWaypoints: " + table + ", " + name + ", " + pluscode);
             for (CustomItem item : items) {
                 if (item.getTitle().equals(name)) {
                     item.setWaypoint(pluscode, waypointValues.get(table).get(name).get(pluscode));
+//                    Log.i(TAG, "waypointValues: " + waypointValues.get(table).get(name));
+//                    Log.i(TAG, "item: " + item.toString());
                     return;     // return since only one entry should match
                 }
             }
@@ -2866,9 +2893,12 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 if (currentItem.getWaypoints().isEmpty()) {
                     markerLat = marker.getPosition().latitude;
                     markerLng = marker.getPosition().longitude;
+                    Log.i(TAG, "A markerLat: " + markerLat + ", markerLng: " + markerLng);
                 } else {
+                    Log.i(TAG, "currentItem: " + currentItem.toString());
                     markerLat = currentItem.getWaypoints().get(currentItem.getLastWaypoint()).latitude;
                     markerLng = currentItem.getWaypoints().get(currentItem.getLastWaypoint()).longitude;
+                    Log.i(TAG, "B markerLat: " + markerLat + ", markerLng: " + markerLng);
                 }
             } else {
                 Log.e(TAG, "currentMarker is null, FIX THIS");
@@ -3087,7 +3117,8 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                     String country = locale.getCountry();
                     root.addProperty("languageCode", locale.toLanguageTag());
                     root.addProperty("units", useMiles(country) ? "imperial" : "metric");
-//                    Log.i(TAG, "computeRoutesRequestBody: " + root.toString());
+
+                    Log.i(TAG, "computeRoutesRequestBody: " + root.toString());
 
                     linkApiKey = Secrets.getStoredGeocodeApiKey(context);
                     try {
@@ -3105,8 +3136,27 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                         try (Response computeRoutesResponse = client.newCall(computeRoutesRequest).execute()) {
                             linkApiKey = null;
                             if (computeRoutesResponse.isSuccessful()) {
+
+//                                int code = computeRoutesResponse.code();
+//                                ResponseBody body = computeRoutesResponse.body();
+//                                Log.i(TAG, "Routes HTTP code=" + code
+//                                        + " message=" + computeRoutesResponse.message()
+//                                        + " bodyNull=" + (body == null)
+//                                        + " contentType=" + (body != null ? body.contentType() : null)
+//                                        + " contentLength=" + (body != null ? body.contentLength() : -1));
+//                                if (body == null) {
+//                                    Log.i(TAG, "No response body");
+//                                } else {
+//                                    // For debugging, this copies up to N bytes without consuming the real stream:
+//                                    String peek = computeRoutesResponse.peekBody(1024 * 1024).string();
+//                                    Log.i(TAG, "peekBody len=" + peek.length());
+//
+//                                    // Then read the real body ONCE:
+//                                    String responseString = body.string();
+//                                    Log.i(TAG, "responseString len=" + responseString.length());
+//                                }
+
                                 String responseString = computeRoutesResponse.body().string();
-//                                Log.i(TAG, "responseString: " + responseString);
                                 JsonObject computeRoutesJson = JsonParser.parseString(responseString).getAsJsonObject();
                                 if (computeRoutesJson.has("routes") && !computeRoutesJson.getAsJsonArray("routes").isEmpty()) {
                                     JsonObject route = computeRoutesJson.getAsJsonArray("routes").get(0).getAsJsonObject();
