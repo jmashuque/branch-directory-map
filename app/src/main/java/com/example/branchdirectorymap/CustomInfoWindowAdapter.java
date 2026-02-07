@@ -2,6 +2,7 @@ package com.example.branchdirectorymap;
 
 import android.content.Context;
 import android.text.SpannableString;
+import android.text.SpannableStringBuilder;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -16,9 +17,11 @@ public class CustomInfoWindowAdapter implements GoogleMap.InfoWindowAdapter {
     private final TextView titleTextView;
     private final TextView snippetTextView;
     private final TextView infoTextView;
+    private final TextView viaTextView;
     private final TextView trafficTextView;
     private final Button naviButton;
     private String infoText;
+    private SpannableStringBuilder viaText;
     private SpannableString trafficText;
     private InfoWindowOpenListener listener;
 
@@ -27,6 +30,7 @@ public class CustomInfoWindowAdapter implements GoogleMap.InfoWindowAdapter {
         titleTextView = mWindow.findViewById(R.id.title);
         snippetTextView = mWindow.findViewById(R.id.snippet);
         infoTextView = mWindow.findViewById(R.id.information);
+        viaTextView = mWindow.findViewById(R.id.via);
         trafficTextView = mWindow.findViewById(R.id.traffic);
         naviButton = mWindow.findViewById(R.id.directionsButton);
     }
@@ -53,8 +57,19 @@ public class CustomInfoWindowAdapter implements GoogleMap.InfoWindowAdapter {
         }
         snippetTextView.setText(snippet);
         infoTextView.setText(infoText);
-        trafficTextView.setText(trafficText);
-
+        if (viaText == null) {
+            viaTextView.setVisibility(View.GONE);
+        } else {
+            viaTextView.setVisibility(View.VISIBLE);
+            viaTextView.setText(viaText);
+            viaText = null;
+        }
+        if (trafficText == null) {
+            trafficTextView.setVisibility(View.GONE);
+        } else {
+            trafficTextView.setVisibility(View.VISIBLE);
+            trafficTextView.setText(trafficText);
+        }
         return mWindow;
     }
 
@@ -84,6 +99,10 @@ public class CustomInfoWindowAdapter implements GoogleMap.InfoWindowAdapter {
 
     public void setInfoText(String infoText) {
         this.infoText = infoText;
+    }
+
+    public void setViaText(SpannableStringBuilder viaText) {
+        this.viaText = viaText;
     }
 
     public void setTrafficText(SpannableString trafficText) {

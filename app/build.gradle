@@ -1,22 +1,112 @@
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+
 plugins {
-    alias libs.plugins.android.application
-    id 'com.google.gms.google-services'
+    alias(libs.plugins.android.application)
+    id("com.google.gms.google-services")
+}
+
+def gpDst = rootProject.file("gradle.properties")
+def gpSrc = rootProject.file("gradle.properties.example")
+if (!gpDst.exists() && gpSrc.exists()) {
+    try {
+        Files.copy(gpSrc.toPath(), gpDst.toPath(), StandardCopyOption.COPY_ATTRIBUTES)
+        logger.lifecycle("Created gradle.properties from gradle.properties.example (auto).")
+    } catch (Throwable t) {
+        logger.warn("Failed to auto-create gradle.properties: ${t.message}")
+    }
+}
+
+tasks.register("initGradleProperties") {
+    group = "setup"
+    description = "Creates gradle.properties from gradle.properties.example if missing."
+
+    doLast {
+        def dst = rootProject.file("gradle.properties")
+        def src = rootProject.file("gradle.properties.example")
+
+        if (dst.exists()) {
+            println "gradle.properties already exists. Skipping."
+            return
+        }
+        if (!src.exists()) {
+            throw new GradleException("Missing ${src.name} in project root.")
+        }
+
+        Files.copy(src.toPath(), dst.toPath(), StandardCopyOption.COPY_ATTRIBUTES)
+        println "Created gradle.properties from gradle.properties.example"
+        println "Now edit gradle.properties with your local values."
+    }
+}
+
+tasks.matching { it.name in ["preBuild", "assemble", "build", "bundle"] }.configureEach {
+    dependsOn(tasks.named("initGradleProperties"))
+}
+
+def isIdeSync =
+        (System.getProperty("idea.sync.active") == "true") ||
+                (project.findProperty("android.injected.invoked.from.ide")?.toString() == "true") ||
+                (project.findProperty("android.injected.build.model.only")?.toString() == "true")
+
+def requestedTasks = (gradle.startParameter.taskNames ?: [])*.toLowerCase()
+def isAssemblingOrBundling =
+        requestedTasks.any { it.contains("assemble") || it.contains("bundle") || it.contains("install") || it.contains("package") }
+
+def gp = { String name -> // string, blank if missing
+    def v = project.findProperty(name)
+    (v == null) ? "" : v.toString()
+}
+
+def gpt = { String name -> gp(name).trim() }
+
+def gb = { String name, boolean defVal -> // booleans are allowed to default
+    def s = gpt(name)
+    if (s.isEmpty()) return defVal
+    return s.equalsIgnoreCase("true")
+}
+
+def q = { String s -> // quote & escape for BuildConfig string values
+    "\"${(s ?: "").replace("\\", "\\\\").replace("\"", "\\\"")}\""
+}
+
+def intLit = { String name ->
+    def s = gpt(name)
+    if (!s.isEmpty() && s.isInteger()) return s
+    return (isIdeSync ? "0" : s) // blank outside IDE sync => you'll fail fast if you actually build without it
+}
+
+def floatLit = { String name ->
+    def s = gpt(name)
+    if (!s.isEmpty()) return s
+    return (isIdeSync ? "0f" : s)
+}
+
+def doubleLit = { String name ->
+    def s = gpt(name)
+    if (!s.isEmpty()) return s
+    return (isIdeSync ? "0d" : s)
 }
 
 def versionPropsFile = file("$rootDir/version.properties")
 def versionProps = new Properties()
+
 if (!versionPropsFile.exists()) {
     versionPropsFile.withWriter { writer ->
-        versionProps.setProperty('VERSION_BUILD', '0')
+        versionProps.setProperty("VERSION_BUILD", "0")
         versionProps.store(writer, null)
     }
 }
-versionProps.load(new FileInputStream(versionPropsFile))
-def previousBuildNum = (versionProps['VERSION_BUILD'] ?: "0").toInteger()
+
+versionPropsFile.withInputStream { stream ->
+    versionProps.load(stream)
+}
+
+def previousBuildNum = (versionProps.getProperty("VERSION_BUILD", "0")).toInteger()
 def newBuildNum = previousBuildNum + 1
 def buildNumber = newBuildNum.toString()
-tasks.named("preBuild").configure { pre ->
-    pre.doFirst {
+
+tasks.named("preBuild").configure { task ->
+    task.doFirst {
         versionProps.setProperty("VERSION_BUILD", buildNumber)
         versionPropsFile.withWriter { writer ->
             versionProps.store(writer, null)
@@ -24,226 +114,255 @@ tasks.named("preBuild").configure { pre ->
     }
 }
 
+def useProxy = gb("PROXY", false)
+def useFirebase = gb("FIREBASE", true)
+def allowRoot = gb("ROOT", false)
+def embedded = gb("EMBEDDED", true)
+
 android {
-    namespace 'com.example.branchdirectorymap'
-    compileSdk 36
+    namespace = "com.example.branchdirectorymap"
+    compileSdk = 36
+
     defaultConfig {
-        applicationId "com.example.branchdirectorymap"
-        minSdk 23
-        targetSdk 36
-        versionCode newBuildNum
-        versionName "0.1-beta1-fix (build ${buildNumber})"
+        applicationId = "com.example.branchdirectorymap"
+        minSdk = 23
+        targetSdk = 36
+        versionCode = newBuildNum
+        versionName = "0.1-beta1-final (build ${buildNumber})"
 
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        def mapsApiKey = ""
-        def linkApiKey = ""
         def apiFile = rootProject.file("api.dat")
+
         if (apiFile.exists()) {
             def lines = apiFile.readLines()
-            if (lines.size() >= 1) {
-                mapsApiKey = lines[0].trim()
+
+            if (lines.size() >= 1 && lines[0].trim()) {
+                def mapsApiKey = lines[0].trim()
                 manifestPlaceholders = [MAPS_API_KEY: mapsApiKey]
             } else {
-                throw new GradleException("BUILD FAILED: 'api.dat' is empty")
+                if (!isIdeSync && isAssemblingOrBundling) {
+                    throw new GradleException("BUILD FAILED: 'api.dat' is empty or missing MAPS key (line 1).")
+                } else {
+                    manifestPlaceholders = [MAPS_API_KEY: "DUMMY_FOR_SYNC"]
+                    logger.warn("api.dat missing/empty line 1: using dummy MAPS_API_KEY for IDE sync.")
+                }
             }
-            if ("${PROXY}" == "false") {
-                if ("${FIREBASE}" == "false" && lines.size() >= 2) {
-                    linkApiKey = lines[1].trim()
-                    def hexEncodedApiKey = linkApiKey.bytes.encodeHex().toString()
-                    buildConfigField "boolean", "USE_FIREBASE", "false"
-                    externalNativeBuild {
-                        cmake {
-                            arguments "-DHEXAGON=${hexEncodedApiKey}"
+
+            if (!useProxy) {
+                if (!useFirebase) {
+                    if (lines.size() >= 2 && lines[1].trim()) {
+                        def linkApiKey = lines[1].trim()
+                        def hexEncodedApiKey = linkApiKey.bytes.encodeHex().toString()
+
+                        buildConfigField("boolean", "USE_FIREBASE", "false")
+
+                        externalNativeBuild {
+                            cmake {
+                                arguments("-DHEXAGON=${hexEncodedApiKey}")
+                            }
+                        }
+                    } else {
+                        if (!isIdeSync && isAssemblingOrBundling) {
+                            throw new GradleException("BUILD FAILED: 'api.dat' missing LINK key (line 2) for non-Firebase mode.")
+                        } else {
+                            // Keep sync alive; you can still enforce properly on real build
+                            buildConfigField("boolean", "USE_FIREBASE", "true")
+                            logger.warn("api.dat missing line 2: forcing USE_FIREBASE=true for IDE sync.")
                         }
                     }
                 } else {
-                    buildConfigField "boolean", "USE_FIREBASE", "true"
+                    buildConfigField("boolean", "USE_FIREBASE", "true")
                 }
-                buildConfigField "boolean", "USE_PROXY", "false"
+
+                buildConfigField("boolean", "USE_PROXY", "false")
             } else {
-                buildConfigField "boolean", "USE_FIREBASE", "false"
-                buildConfigField "boolean", "USE_PROXY", "true"
-                buildConfigField "String", "PROXY_URL", "\"" + "${PROXYURL}" + "\""
+                buildConfigField("boolean", "USE_FIREBASE", "false")
+                buildConfigField("boolean", "USE_PROXY", "true")
+                buildConfigField("String", "PROXY_URL", q(gpt("PROXYURL"))) // blank if not set
             }
         } else {
-            throw new GradleException("BUILD FAILED: 'api.dat' not found")
+            if (!isIdeSync && isAssemblingOrBundling) {
+                throw new GradleException("BUILD FAILED: 'api.dat' not found")
+            } else {
+                manifestPlaceholders = [MAPS_API_KEY: "DUMMY_FOR_SYNC"]
+                logger.warn("api.dat not found: using dummy MAPS_API_KEY for IDE sync.")
+                // Keep BuildConfig flags consistent for compilation:
+                buildConfigField("boolean", "USE_PROXY", useProxy ? "true" : "false")
+                buildConfigField("boolean", "USE_FIREBASE", useFirebase ? "true" : "false")
+                if (useProxy) {
+                    buildConfigField("String", "PROXY_URL", q(gpt("PROXYURL")))
+                }
+            }
         }
 
-        if ("${ROOT}" == "true") {
-            buildConfigField "boolean", "ALLOW_ROOT", "true"
+        // Booleans: allowed defaults
+        buildConfigField("boolean", "ALLOW_ROOT", allowRoot ? "true" : "false")
+        buildConfigField("boolean", "USE_LIGHT_SENSOR", gb("LIGHTSENSOR", false) ? "true" : "false")
+        buildConfigField("boolean", "USE_ADVANCED_ROUTING", gb("ADVANCEDROUTES", false) ? "true" : "false")
+        buildConfigField("boolean", "EXPORT_DB", gb("EXPORT", false) ? "true" : "false")
+        buildConfigField("boolean", "ALLOW_DUPLICATES", gb("DUPLICATES", false) ? "true" : "false")
+        buildConfigField("boolean", "SHOW_ALL_HEADER", gb("ALLMARKERS", false) ? "true" : "false")
+        buildConfigField("boolean", "SHOW_BAD_MARKERS", gb("BADMARKERS", false) ? "true" : "false")
+        buildConfigField("boolean", "SETTINGS_PER_FILE", gb("SETTINGSPERFILE", false) ? "true" : "false")
+        buildConfigField("boolean", "SPEED_GPS_READ", gb("SPEEDGPS", false) ? "true" : "false")
+
+        // Strings: default blank
+        buildConfigField("String", "EMBEDDED_DB", q(gpt("EMBEDDEDDB")))
+        buildConfigField("String", "TRAFFIC_METRICS", q(gpt("TRAFFICMETRICS")))
+        buildConfigField("String", "DATABASE_NAME", q(gpt("DBFILE")))
+        buildConfigField("String", "MARKER_COLOURS", q(gpt("COLOURS")))
+        buildConfigField("String", "POLYLINE_GRADIENT_HEX", q(gpt("POLYLINEHEX")))
+        buildConfigField("String", "MULTI_ROW_SETS", q(gpt("MULTIROWSETS")))
+        buildConfigField("String", "USE_PHONE", q(gpt("PHONE")))
+        buildConfigField("String", "USE_REFINED", q(gpt("REFINED")))
+        buildConfigField("String", "TITLE_SPLIT", q(gpt("TITLESPLIT")))
+        buildConfigField("String", "NAME_FIRST", q(gpt("NAMEFIRST")))
+        buildConfigField("String", "CODE_PREFIX", q(gpt("CODEPREFIX")))
+        buildConfigField("String", "COLUMNS_PER_ROW", q(gpt("COLUMNSPERROW")))
+        buildConfigField("String", "IGNORE_ROWS_BEGIN", q(gpt("IGNOREROWSBEGIN")))
+        buildConfigField("String", "IGNORE_ROWS_END", q(gpt("IGNOREROWSEND")))
+        buildConfigField("String", "TITLE_INDEX", q(gpt("TITLEINDEX")))
+        buildConfigField("String", "TITLE_2_INDEX", q(gpt("TITLE2INDEX")))
+        buildConfigField("String", "ADDRESS_INDEX", q(gpt("ADDRESSINDEX")))
+        buildConfigField("String", "REFINED_ADDRESS_INDEX", q(gpt("REFINEDADDRESSINDEX")))
+        buildConfigField("String", "PHONE_INDEX", q(gpt("PHONEINDEX")))
+        buildConfigField("String", "ROWS_PER_SET", q(gpt("ROWSPERSET")))
+        buildConfigField("String", "TITLE_OFFSET", q(gpt("TITLEOFFSET")))
+        buildConfigField("String", "TITLE_2_OFFSET", q(gpt("TITLE2OFFSET")))
+        buildConfigField("String", "ADDRESS_OFFSET", q(gpt("ADDRESSOFFSET")))
+        buildConfigField("String", "REFINED_ADDRESS_OFFSET", q(gpt("REFINEDADDRESSOFFSET")))
+        buildConfigField("String", "PHONE_OFFSET", q(gpt("PHONEOFFSET")))
+
+        // Embedded: boolean default allowed, strings blank if missing
+        if (embedded) {
+            buildConfigField("boolean", "EMBEDDED_FILE", "true")
+            buildConfigField("String", "FILE_NAMES", q(gpt("FILENAMES")))
+            buildConfigField("String", "DEFAULT_FILE", q(gpt("DEFAULTFILE")))
         } else {
-            buildConfigField "boolean", "ALLOW_ROOT", "false"
+            buildConfigField("boolean", "EMBEDDED_FILE", "false")
+            buildConfigField("String", "FILE_NAMES", q(""))
+            buildConfigField("String", "DEFAULT_FILE", q(""))
         }
-        buildConfigField "String", "EMBEDDED_DB", "\"" + "${EMBEDDEDDB}" + "\""
-        if ("${EMBEDDED}" == "true") {
-            buildConfigField "boolean", "EMBEDDED_FILE", "true"
-            def FILE_NAMES = (project.hasProperty("FILENAMES") ? "${FILENAMES}" : "").trim()
-            if (FILE_NAMES.isEmpty()) {
-                buildConfigField "String", "FILE_NAMES", "\"\""
-            } else {
-                buildConfigField "String", "FILE_NAMES", "\"" + "${FILENAMES}" + "\""
-            }
-            def DEFAULT_FILE = (project.hasProperty("DEFAULTFILE") ? "${DEFAULTFILE}" : "").trim()
-            if (DEFAULT_FILE.isEmpty()) {
-                buildConfigField "String", "DEFAULT_FILE", "\"\""
-            } else {
-                buildConfigField "String", "DEFAULT_FILE", "\"" + "${DEFAULTFILE}" + "\""
-            }
+
+        // Numbers: blank unless IDE sync (then 0/0f/0d to keep sync alive)
+        buildConfigField("int", "MIN_CLUSTER_SIZE", intLit("MINCLUSTERSIZE"))
+        buildConfigField("int", "MAX_THREADS", intLit("MAXTHREADS"))
+        buildConfigField("int", "BASE_DELAY_MS", intLit("BASEDELAY"))
+        buildConfigField("int", "RANDOM_DELAY_MS", intLit("RANDOMDELAY"))
+        buildConfigField("int", "INTERMEDIATE_STEPS", intLit("INTERMEDIATES"))
+
+        buildConfigField("float", "RATE_LOC_DISTANCE", floatLit("RATEDISTANCE"))
+        buildConfigField("int", "RATE_LOC_PING", intLit("RATEPING"))
+        buildConfigField("int", "TIMEOUT_FIREBASE", intLit("TIMEOUT_F"))
+        buildConfigField("double", "TIMEOUT_ROUTES", doubleLit("TIMEOUT_R"))
+
+        // Map ID vs style JSON (strings blank if missing)
+        def mapId = gpt("MAPID")
+        if (!mapId.isEmpty()) {
+            resValue("string", "map_id", mapId)
+            buildConfigField("boolean", "USE_MAP_ID", "true")
+            buildConfigField("String", "STYLE_JSON", q(""))
         } else {
-            buildConfigField "boolean", "EMBEDDED_FILE", "false"
-            buildConfigField "String", "FILE_NAMES", '""'
-            buildConfigField "String", "DEFAULT_FILE", '""'
+            resValue("string", "map_id", "")
+            buildConfigField("boolean", "USE_MAP_ID", "false")
+            buildConfigField("String", "STYLE_JSON", q(gpt("STYLEJSON")))
         }
-        buildConfigField "int", "MIN_CLUSTER_SIZE", ("${MINCLUSTERSIZE}" ?: "5")
-        buildConfigField "int", "MAX_THREADS", "${MAXTHREADS}"
-        buildConfigField "int", "BASE_DELAY_MS", "${BASEDELAY}"
-        buildConfigField "int", "RANDOM_DELAY_MS", "${RANDOMDELAY}"
-        buildConfigField "int", "INTERMEDIATE_STEPS", "${INTERMEDIATES}"
-        if ("${LIGHTSENSOR}" == "true") {
-            buildConfigField "boolean", "USE_LIGHT_SENSOR", "true"
-        } else {
-            buildConfigField "boolean", "USE_LIGHT_SENSOR", "false"
-        }
-        buildConfigField "String", "TRAFFIC_METRICS", "\"" + "${TRAFFICMETRICS}" + "\""
-        if ("${MAPID}" != "") {
-            resValue "string", "map_id", "${MAPID}"
-            buildConfigField "boolean", "USE_MAP_ID", "true"
-            buildConfigField "String", "STYLE_JSON", '""'
-        } else {
-            resValue "string", "map_id", ""
-            buildConfigField "boolean", "USE_MAP_ID", "false"
-            buildConfigField "String", "STYLE_JSON", "\"" + "${STYLEJSON}" + "\""
-        }
-        if ("${ADVANCEDROUTES}" == "true") {
-            buildConfigField "boolean", "USE_ADVANCED_ROUTING", "true"
-        } else {
-            buildConfigField "boolean", "USE_ADVANCED_ROUTING", "false"
-        }
-        buildConfigField "int", "TIMEOUT_S", "${TIMEOUT}"
-        buildConfigField "String", "DATABASE_NAME", "\"" + "${DBFILE}" + "\""
-        if ("${EXPORT}" == "true") {
-            buildConfigField "boolean", "EXPORT_DB", "true"
-        } else {
-            buildConfigField "boolean", "EXPORT_DB", "false"
-        }
-        if ("${DUPLICATES}" == "true") {
-            buildConfigField "boolean", "ALLOW_DUPLICATES", "true"
-        } else {
-            buildConfigField "boolean", "ALLOW_DUPLICATES", "false"
-        }
-        if ("${ALLMARKERS}" == "true") {
-            buildConfigField "boolean", "SHOW_ALL_HEADER", "true"
-        } else {
-            buildConfigField "boolean", "SHOW_ALL_HEADER", "false"
-        }
-        if ("${BADMARKERS}" == "true") {
-            buildConfigField "boolean", "SHOW_BAD_MARKERS", "true"
-        } else {
-            buildConfigField "boolean", "SHOW_BAD_MARKERS", "false"
-        }
-        if ("${SETTINGSPERFILE}" == "true") {
-            buildConfigField "boolean", "SETTINGS_PER_FILE", "true"
-        } else {
-            buildConfigField "boolean", "SETTINGS_PER_FILE", "false"
-        }
-        buildConfigField "String", "MARKER_COLOURS", "\"" + "${COLOURS}" + "\""
-        buildConfigField "String", "MULTI_ROW_SETS", "\"" + "${MULTIROWSETS}" + "\""
-        buildConfigField "String", "USE_PHONE", "\"" + "${PHONE}" + "\""
-        buildConfigField "String", "USE_REFINED", "\"" + "${REFINED}" + "\""
-        buildConfigField "String", "TITLE_SPLIT", "\"" + "${TITLESPLIT}" + "\""
-        buildConfigField "String", "NAME_FIRST", "\"" + "${NAMEFIRST}" + "\""
-        def RAWREGION = GEOREGION
-        def ESCREGION = RAWREGION.replaceAll('"', '\\\\"')
-        buildConfigField "String", "GEOCODE_REGION", "\"${ESCREGION}\""
-        def DELIMVAL = (project.hasProperty("DELIM") ? "${DELIM}" : "")
-        DELIMVAL = DELIMVAL.replaceAll(/\\ /, " ").replaceAll(/"([^"]*)"/, '$1')
-        buildConfigField "String", "DELIMITER", "\"${DELIMVAL}\""
-        def CODEDELIMVAL = (project.hasProperty("CODEDELIM") ? "${CODEDELIM}" : "")
-        CODEDELIMVAL = CODEDELIMVAL.replaceAll(/\\ /, " ").replaceAll(/"([^"]*)"/, '$1')
-        buildConfigField "String", "CODE_DELIMITER", "\"${CODEDELIMVAL}\""
-        buildConfigField "String", "CODE_PREFIX", "\"" + "${CODEPREFIX}" + "\""
-        buildConfigField "String", "COLUMNS_PER_ROW", "\"" + "${COLUMNSPERROW}" + "\""
-        buildConfigField "String", "IGNORE_ROWS_BEGIN", "\"" + "${IGNOREROWSBEGIN}" + "\""
-        buildConfigField "String", "IGNORE_ROWS_END", "\"" + "${IGNOREROWSEND}" + "\""
-        buildConfigField "String", "TITLE_INDEX", "\"" + "${TITLEINDEX}" + "\""
-        buildConfigField "String", "TITLE_2_INDEX", "\"" + "${TITLE2INDEX}" + "\""
-        buildConfigField "String", "ADDRESS_INDEX", "\"" + "${ADDRESSINDEX}" + "\""
-        buildConfigField "String", "REFINED_ADDRESS_INDEX", "\"" + "${REFINEDADDRESSINDEX}" + "\""
-        buildConfigField "String", "PHONE_INDEX", "\"" + "${PHONEINDEX}" + "\""
-        buildConfigField "String", "ROWS_PER_SET", "\"" + "${ROWSPERSET}" + "\""
-        buildConfigField "String", "TITLE_OFFSET", "\"" + "${TITLEOFFSET}" + "\""
-        buildConfigField "String", "TITLE_2_OFFSET", "\"" + "${TITLE2OFFSET}" + "\""
-        buildConfigField "String", "ADDRESS_OFFSET", "\"" + "${ADDRESSOFFSET}" + "\""
-        buildConfigField "String", "REFINED_ADDRESS_OFFSET", "\"" + "${REFINEDADDRESSOFFSET}" + "\""
-        buildConfigField "String", "PHONE_OFFSET", "\"" + "${PHONEOFFSET}" + "\""
+
+        // Region: avoid bare GEOREGION
+        def rawRegion = gpt("GEOREGION")
+        def escRegion = rawRegion.replaceAll("\"", "\\\\\"")
+        buildConfigField("String", "GEOCODE_REGION", q(escRegion))
+
+        // Delims: treat as strings (blank if missing), normalize escaping
+        def delimVal = gpt("DELIM")
+        delimVal = delimVal.replaceAll(/\\ /, " ").replaceAll(/"([^"]*)"/, '$1')
+        buildConfigField("String", "DELIMITER", q(delimVal))
+
+        def codeDelimVal = gpt("CODEDELIM")
+        codeDelimVal = codeDelimVal.replaceAll(/\\ /, " ").replaceAll(/"([^"]*)"/, '$1')
+        buildConfigField("String", "CODE_DELIMITER", q(codeDelimVal))
     }
 
     buildTypes {
         release {
-            debuggable false
-            minifyEnabled true
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            debuggable = false
+            minifyEnabled = true
+            proguardFiles(
+                    getDefaultProguardFile("proguard-android-optimize.txt"),
+                    "proguard-rules.pro"
+            )
         }
         debug {
-            debuggable false
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            debuggable = false
+            minifyEnabled = false
+            proguardFiles(
+                    getDefaultProguardFile("proguard-android-optimize.txt"),
+                    "proguard-rules.pro"
+            )
         }
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     buildFeatures {
-        viewBinding true
-        buildConfig true
+        viewBinding = true
+        buildConfig = true
+        resValues = true
     }
 
-    if("${PROXY}" == "false" && "${FIREBASE}" == "false") {
+    if (!useProxy && !useFirebase) {
         externalNativeBuild {
             cmake {
-                path file('src/main/cpp/CMakeLists.txt')
-                version '4.1.2'
+                path = file("src/main/cpp/CMakeLists.txt")
+                version = "4.1.2"
             }
         }
-        packagingOptions {
-            exclude 'google-services.json'
+
+        packaging {
+            resources {
+                excludes += ["google-services.json"]
+            }
         }
     }
 }
 
 dependencies {
-    implementation libs.appcompat
-    implementation libs.material
-    implementation libs.constraintlayout
-    implementation libs.play.services.maps
-    implementation libs.play.services.location
-    implementation libs.places
-    implementation libs.opencsv
-    implementation libs.navigation.fragment
-    implementation libs.navigation.ui
-    implementation libs.activity
-    implementation libs.android.maps.utils
-    implementation libs.okhttp
-    implementation libs.gson
-    implementation libs.retrofit2.retrofit
-    implementation libs.converter.gson
-    implementation libs.commons.lang3
-    if ("${PROXY}" == "false") {
-        implementation libs.androidx.security.crypto
-        if("${FIREBASE}" == "true") {
-            implementation platform(libs.firebase.bom)
-            implementation libs.google.firebase.config
-            implementation libs.google.firebase.analytics
+    implementation(libs.appcompat)
+    implementation(libs.material)
+    implementation(libs.constraintlayout)
+    implementation(libs.play.services.maps)
+    implementation(libs.play.services.location)
+    implementation(libs.places)
+    implementation(libs.opencsv)
+    implementation(libs.navigation.fragment)
+    implementation(libs.navigation.ui)
+    implementation(libs.activity)
+    implementation(libs.android.maps.utils)
+    implementation(libs.okhttp)
+    implementation(libs.gson)
+    implementation(libs.retrofit2.retrofit)
+    implementation(libs.converter.gson)
+    implementation(libs.commons.lang3)
+
+    if (!useProxy) {
+        implementation(libs.androidx.security.crypto)
+
+        if (useFirebase) {
+            implementation(platform(libs.firebase.bom))
+            implementation(libs.google.firebase.config)
+            implementation(libs.google.firebase.analytics)
         }
     }
-    if ("${ROOT}" == "false") {
-        implementation libs.rootbeer.lib
+
+    if (!allowRoot) {
+        implementation(libs.rootbeer.lib)
     }
-    testImplementation libs.junit
-    androidTestImplementation libs.ext.junit
-    androidTestImplementation libs.espresso.core
+
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.ext.junit)
+    androidTestImplementation(libs.espresso.core)
 }

@@ -9,6 +9,8 @@
     <string name="btn_add">Add to Route</string>
     <string name="btn_remove">Remove from Route</string>
     <string name="btn_call">Call Branch</string>
+    <string name="via">Via:</string>
+    <string name="failed">Failed to retrieve route information. Try again by selecting marker.</string>
     <string name="location_warn">This app requires Precise Location permission to function properly. Without it, you will not be able to use any routing features or see traffic information.</string>
     <string name="type_warn">Error trying to read the chosen file, this app only reads files with CSV or DB extensions. Press back twice to exit the app, and then please re-run the app to try again.</string>
     <string name="db_warn">Error trying to read the embedded DB file. Please make sure the file name is correct before rebuilding the app. This app will now terminate.</string>

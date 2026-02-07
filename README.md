@@ -1,6 +1,6 @@
 # ![](screenshots/ic_launcher.png) Branch Directory Map
 
-This project and associated README file are under active development and may change at any time. Please consider watching this repository if you're interested in tracking its progress.
+This project is under active development and may change at any time. Please consider watching this repository if you're interested in tracking its progress.
 
 ## Table of Contents
 
@@ -16,10 +16,11 @@ This project and associated README file are under active development and may cha
 - [Data Collection](#data-collection)
 - [Known Issues](#known-issues)
 - [Changelog](#changelog)
+- [Thank You](#thank-you)
 
 ## Overview
 
-Branch Directory Map is an Android app, coded mostly in Java using Android Studio. This app primarily uses the Google Maps SDK for Android and various Google API's. Basically it reads CSV files (converted from XLSX files or other sources) and then parses this data to create an SQLite database, and then contacts Google Maps Geocoding API to get latitude/longitude positions and stores them for future retrieval in the database. Users can see all the valid locations or branches on a Google Map fragment, with custom coloured markers for each CSV file read. Users are able to search for branches based on branch codes or names or addresses, and get information about that branch like distance and ETA, as well as traffic information and a polyline projected on the map to show the optimal route to take. Users can also call branches that have listed phone numbers. There is also a routing feature that lets users add multiple branches to a route and use the Google Maps app for Android to navigate to all the branches on the route, as well as show all information for the whole route. This app is in a beta status currently, so commercial usage isn't advised just yet, although my ultimate goal is to make this app usable by any company who needs a mapped branch directory for driver navigation. I developed this app to help drivers, working for one of the largest rental car companies in the world, navigate between the hundreds of branches and dealerships they deal with, and it has been immensely well received and used.
+Branch Directory Map is an Android app, coded mostly in Java using Android Studio. This app primarily uses the Google Maps SDK for Android and various Google API's. It reads CSV files (converted from XLSX files or other sources) and then parses this data to create an SQLite database, and then contacts Google Maps Geocoding API to get latitude/longitude positions and stores them for future retrieval in the database. Users can see all the valid locations or branches on a Google Map fragment, with custom coloured markers for each CSV file read. Users are able to search for branches based on branch codes or names or addresses, and get information about that branch like distance and ETA, as well as traffic information and a polyline projected on the map to show the optimal route to take. Users can also call branches that have listed phone numbers. There is also a routing feature that lets users add multiple branches to a route and use the Google Maps app for Android to navigate to all the branches on the route, as well as show all information for the whole route. This app is in a beta status currently, so commercial usage isn't advised just yet, although my ultimate goal is to make this app usable by any company who needs a mapped branch directory for driver navigation. I developed this app to help drivers, working for one of the largest rental car companies in the world, navigate between the hundreds of branches and dealerships they deal with, and it has been immensely well received and used.
 
 With the current Essentials tier, Google is surprisingly generous with 10,000 free calls per API for all non-Pro/Enterprise level Google Maps Platform API's. Refer here for Google's latest tier-based pricing and limits: [Platform Pricing & API Costs](https://cloud.google.com/maps-platform/pricing)
 
@@ -37,7 +38,7 @@ With the current Essentials tier, Google is surprisingly generous with 10,000 fr
 - export DB file to Downloads folder once all markers have been geocoded
 - uses `EncryptedSharedPreferences` to store API key for HTTPS requests, since this key cannot be secured without a backend proxy
 - conditional approach to dependencies/imports so you can either implement Firebase Remote Config or Java NDK C++ obfuscation to retrieve the insecure API key
-- includes two sample CSV files in assets folder, along with the geocoded markers in a DB file, with a sample gradle.properties.example file with the right settings to geocode/map the locations in the CSV files
+- includes three sample CSV files in assets folder, along with the geocoded markers in a DB file, with a sample gradle.properties.example file with the right settings to geocode/map the locations in the CSV files
 - optionally uses [RootBeer](https://github.com/scottyab/rootbeer) (by [Scott Alexander-Bown](https://github.com/scottyab)) to prevent root access and denies debugging mode to further protect the insecure requests API key
 
 ## Gallery
@@ -63,7 +64,7 @@ With the current Essentials tier, Google is surprisingly generous with 10,000 fr
 
 ## Guide
 
-Clone the repository, unzip it, and load the folder as a project in Android Studio. Then, copy all of `gradle.properties.example` into the auto-generated `gradle.properties` file, and either use the example values and CSV files or make your own configuration and add your CSV files to `app\src\main\assets`. Read the [Requirements](#requirements) section for more information. You are now ready to compile and run your first build.
+Clone the repository, unzip it, and load the folder as a project in Android Studio. Then, either copy `gradle.properties.example` file into the `gradle.properties` file, or sync and build the project and the example file will be automatically copied if the properties file is missing. Then, either use the example values and CSV files or make your own configuration and add your CSV files to `app\src\main\assets`. Read the [Requirements](#requirements) section for more information. You are now ready to run your first build.
 
 The following are all the user-modifiable variables in `gradle.properties` and their descriptions:
 
@@ -101,17 +102,22 @@ The following are all the user-modifiable variables in `gradle.properties` and t
 | PHONE                | bool\[]    | use phone numbers                                                                                                                                                                                                                                           |
 | PHONEINDEX           | int\[]     | x-index(es) of phone number column                                                                                                                                                                                                                          |
 | PHONEOFFSET          | int\[]     | y-index(es) of phone number column                                                                                                                                                                                                                          |
+| POLYLINEHEX          | str\[]     | override colour values to use for polyline gradient, can be one to as many comma separated colours as needed, accepted formats include #RRGGBB, #AARRGGBB, 0xRRGGBB, 0xAARRGGBB                                                                             |
 | PROXY                | bool       | use a proxy for all requests, in development, do not change                                                                                                                                                                                                 |
 | PROXYURL             | str        | proxy url, in development, do not change                                                                                                                                                                                                                    |
 | RANDOMDELAY          | int        | max random delay between queries, prevents request collisions, do not exceed 50 requests / second for free tier                                                                                                                                             |
+| RATEDISTANCE         | float      | distance buffer in meters to consider as the same geolocation for rate limiting, should not be set to less than 5 due to GPS jitter                                                                                                                         |
+| RATEPING             | int        | time between location pings in seconds, affects battery, overwritten if another app is pinging faster, in which case 2 seconds is used                                                                                                                      |
 | REFINED              | bool\[]    | use refined address column, such as postal code or google plus code                                                                                                                                                                                         |
 | REFINEDADDRESSINDEX  | int\[]     | x-index(es) of refined address column                                                                                                                                                                                                                       |
 | REFINEDADDRESSOFFSET | int\[]     | y-index(es) of refined address column                                                                                                                                                                                                                       |
 | ROOT                 | bool       | allow root access, for the security of api keys this should be set to false                                                                                                                                                                                 |
 | ROWSPERSET           | int\[]     | number of rows per set                                                                                                                                                                                                                                      |
 | SETTINGSPERFILE      | bool       | read comma separated values, one set per file name expected, otherwise first value used, settings that can have multiple values are denoted by \[] after type                                                                                               |
+| SPEEDGPS             | bool       | if enabled, allows user to toggle active speed readout using constant GPS pings, drains battery faster                                                                                                                                                      |
 | STYLEJSON            | str\[6]    | raw resource file names for map styling, for reference only, do not change, you can alter the files themselves to apply custom styling                                                                                                                      |
-| TIMEOUT              | int        | timeout in seconds for firebase api key remote config                                                                                                                                                                                                       |
+| TIMEOUT_F            | int        | timeout in seconds for firebase api key remote config                                                                                                                                                                                                       |
+| TIMEOUT_R            | double     | minimum time in seconds between routes requests with the same data, zero is allowed but not recommended                                                                                                                                                     |
 | TITLEINDEX           | int\[]     | x-index(es) of title column, title includes branch code and/or name                                                                                                                                                                                         |
 | TITLEOFFSET          | int\[]     | y-index(es) of title column, title includes branch code and/or name                                                                                                                                                                                         |
 | TITLESPLIT           | bool\[]    | combine branch code and name from separate fields, if true then TITLE is assumed to be name and TITLE2 is assumed to be code, DELIM is used as the character between the code and the name internally and when displayed                                    |
@@ -211,7 +217,6 @@ Now simply right click on any of the buttons on the toolbar and click `Customize
 - favourites and history function in the SearchView
 - ability for users to broadcast location, send information to other users, and report road hazards to all users
 - consent/EULA/privacy policy/terms and conditions template and activity for end-users
-- route optimization feature using Traveling Salesman algorithm for routes with multiple waypoints
 - exceed the 23/25 waypoints hard limit by cutting extended routes into segments
 
 ## Accuracy
@@ -232,22 +237,37 @@ There is one known issue I've been trying to resolve. Your logcat may be flooded
 
 ## Changelog
 
-### 0.1-beta2 (upcoming)
+### planned
 - upcoming: loading screen activity or progress bar for geocoding segment
 - upcoming: marker icons will render with a letter to show position if on the route
 - upcoming: ability route to a marker more than once
 - upcoming: revised database scheme to help geocode better including mandatory full-format postal codes and separate plus codes
 - upcoming: proxy option which will disable implementing Firebase Remote Config and `EncryptedSharedPreferences`
-- upcoming: option for automatic route optimization using Traveling Salesman algorithm
-- upcoming: persistent settings through use of `SharedPreferences`
-- upcoming: option for active speed readout on the map fragment
 - upcoming: ability to specify extra information about branches by reading one or more extra CSV columns
 - upcoming: history and favourites features for branches
 - upcoming: overlay buttons on marker info windows to favourite, refresh, or close the marker
 - upcoming: automatic refreshing when marker info windows are open for a specified amount of time
 - upcoming: visual waypoint counter displayed on the map fragment when relevant
-- upcoming: new option `BADMARKERS` to display branches not successfully geocoded in the suggestion list, but not on the map
 - upcoming: proper edge-to-edge and gesture navigation support
+- in progress: persistent settings through use of `SharedPreferences`
+- in progress: option to show an active speed readout overlay by constantly pinging GPS, enable `SPEEDGPS`, be careful of battery drain
+- in progress: new option `BADMARKERS` to display branches not successfully geocoded in the suggestion list, but not on the map
+
+### 0.1-beta1-final (2026-02-07)
+- feature: button to optimize route when more than two intermediate markers are selected
+- feature: rate limiting of route requests and optimization requests using cached results, specify a `TIMEOUT_R` value greater than zero
+- improved: via waypoints now displayed in sequence in the marker info window
+- improved: logic for detecting tolls/ferries/highways when avoidance is enabled greatly improved
+- improved: polylines for routes now shaded in a dynamic colour gradient to differentiate segments better, use `POLYLINEHEX` to define custom colours
+- improved: workflow tweaks, logic fixes and general optimizations in `GetInformationTask` class, heavily refactored code
+- major fix: no longer crashes when GetInformationTask returns null result, refactored code
+- revised: some icon assets updated
+- revised: app-level `build.gradle` now sync safe, heavily modified to follow modern guidelines including fallbacks and defaults
+- revised: `gradle.properties` now auto-generated from `gradle.properties.example` when absent at build time
+- revised: route shows waypoints for all markers, not just the currently selected one
+- revised: location ping and distance buffer can be specified using `RATEPING` and `RATEDISTANCE`
+- revised: `libs.versions.toml` updated, AGP version upgraded to 9.0.0, some refactored code
+- revised: general code cleaning, public and private declarations made consistent
 
 ### 0.1-beta1-fix (2026-01-03)
 - fix: build number no longer padded

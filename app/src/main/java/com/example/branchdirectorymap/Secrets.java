@@ -144,10 +144,10 @@ public class Secrets {
 
                     Handler timeoutHandler = new Handler(Looper.getMainLooper());
                     Runnable timeoutRunnable = () -> {
-                        Log.e(TAG, "Timeout: Failed to fetch API key within " + BuildConfig.TIMEOUT_S + " seconds");
+                        Log.e(TAG, "Timeout: Failed to fetch API key within " + BuildConfig.TIMEOUT_FIREBASE + " seconds");
                         listener.onApiKeyReceived(false);
                     };
-                    timeoutHandler.postDelayed(timeoutRunnable, BuildConfig.TIMEOUT_S * 1000);
+                    timeoutHandler.postDelayed(timeoutRunnable, BuildConfig.TIMEOUT_FIREBASE * 1000);
 
                     Method fetchAndActivateMethod = firebaseRCClass.getMethod("fetchAndActivate");
                     Object fetchTask = fetchAndActivateMethod.invoke(firebaseRCInstance);

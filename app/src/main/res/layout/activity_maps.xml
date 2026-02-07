@@ -149,6 +149,18 @@
         android:textSize="18sp" />
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/button_optimize"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentEnd="true"
+        android:layout_above="@id/button_directions"
+        android:layout_margin="12dp"
+        app:tint="@color/pri_text_high"
+        app:backgroundTint="@color/pri_text_low_alt"
+        android:src="@drawable/ic_optimize"
+        android:visibility="gone" />
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/button_directions"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
